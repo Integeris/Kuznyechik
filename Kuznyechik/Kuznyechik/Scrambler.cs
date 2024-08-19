@@ -339,12 +339,12 @@ namespace Kuznyechik
         /// <summary>
         /// Создание Шифратора.
         /// </summary>
-        /// <param name="key">Ключ (32 байта).</param>
+        /// <param name="key">Ключ.</param>
         public Scrambler(byte[] key)
         {
             if (key.Length != KeySize)
             {
-                throw new ArgumentOutOfRangeException(nameof(key), "Длинна ключа должна быть 32 байта.");
+                throw new ArgumentOutOfRangeException(nameof(key), $"Длинна ключа должна быть {KeySize} байта.");
             }
 
             linearTransformation = new byte[]
@@ -373,7 +373,7 @@ namespace Kuznyechik
         {
             if (block.Length != BlockSize)
             {
-                throw new ArgumentOutOfRangeException(nameof(block), "Длина массива должна быть 16 байт.");
+                throw new ArgumentOutOfRangeException(nameof(block), $"Длина массива должна быть {BlockSize} байт.");
             }
 
             for (int i = 0; i < 9; i++)
@@ -390,20 +390,24 @@ namespace Kuznyechik
         /// Шифрование массива блоков.
         /// </summary>
         /// <param name="arr">Массив.</param>
-        public void Encrypt(byte[] arr)
+        /// <returns>Зашифрованный массив байт.</returns>
+        public byte[] Encrypt(byte[] arr)
         {
-            if (arr.Length % BlockSize != 0)
-            {
-                throw new Exception("Можно зашифровать только целое количество блоков.");
-            }
+            int lossBytes = BlockSize - arr.Length % BlockSize;
+            byte[] encriptArr = new byte[arr.Length + lossBytes];
+            Array.Copy(arr, encriptArr, arr.Length);
 
-            Parallel.For(0, arr.Length / BlockSize, (i) =>
+            encriptArr[^1] = (byte)lossBytes;
+
+            Parallel.For(0, encriptArr.Length / BlockSize, (i) =>
             {
-                Span<byte> span = new Span<byte>(arr, i * BlockSize, BlockSize);
+                Span<byte> span = new Span<byte>(encriptArr, i * BlockSize, BlockSize);
                 byte[] tmpBlock = span.ToArray();
                 EncryptBlock(tmpBlock);
                 tmpBlock.CopyTo(span);
             });
+
+            return encriptArr;
         }
 
         /// <summary>
@@ -414,7 +418,7 @@ namespace Kuznyechik
         {
             if (block.Length != BlockSize)
             {
-                throw new ArgumentOutOfRangeException(nameof(block), "Длина массива должна быть 16 байт.");
+                throw new ArgumentOutOfRangeException(nameof(block), $"Длина массива должна быть {BlockSize} байт.");
             }
 
             ExclusiveOR(block, keys[9]);
@@ -431,11 +435,12 @@ namespace Kuznyechik
         /// Расшифровка массива.
         /// </summary>
         /// <param name="arr">Массив.</param>
-        public void Decrypt(byte[] arr)
+        /// <returns>Расшифрованный масиив байт.</returns>
+        public byte[] Decrypt(byte[] arr)
         {
             if (arr.Length % BlockSize != 0)
             {
-                throw new Exception("Можно расшифровать только целое количество блоков.");
+                throw new Exception($"Можно расшифровать только целое количество блоков ({BlockSize} байт).");
             }
 
             Parallel.For(0, arr.Length / BlockSize, (i) =>
@@ -445,6 +450,23 @@ namespace Kuznyechik
                 DecryptBlock(tmpBlock);
                 tmpBlock.CopyTo(span);
             });
+
+            if (arr.Length == 0)
+            {
+                return Array.Empty<byte>();
+            }
+
+            byte lossByte = arr[^1];
+
+            if (lossByte > arr.Length)
+            {
+                throw new Exception($"Данные зашифрованны не верно.");
+            }
+
+            byte[] decriptArr = new byte[arr.Length - lossByte];
+            Array.Copy(arr, decriptArr, decriptArr.Length);
+
+            return decriptArr;
         }
 
         /// <summary>
