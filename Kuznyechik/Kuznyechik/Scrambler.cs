@@ -390,14 +390,15 @@ namespace Kuznyechik
         /// Шифрование массива блоков.
         /// </summary>
         /// <param name="arr">Массив.</param>
-        /// <returns>Зашифрованный массив байт.</returns>
-        public byte[] Encrypt(byte[] arr)
+        public void Encrypt(ref byte[] arr)
         {
             int lossBytes = BlockSize - arr.Length % BlockSize;
             byte[] encriptArr = new byte[arr.Length + lossBytes];
             Array.Copy(arr, encriptArr, arr.Length);
 
             encriptArr[^1] = (byte)lossBytes;
+
+            arr = encriptArr;
 
             Parallel.For(0, encriptArr.Length / BlockSize, (i) =>
             {
@@ -406,8 +407,6 @@ namespace Kuznyechik
                 EncryptBlock(tmpBlock);
                 tmpBlock.CopyTo(span);
             });
-
-            return encriptArr;
         }
 
         /// <summary>
@@ -435,38 +434,33 @@ namespace Kuznyechik
         /// Расшифровка массива.
         /// </summary>
         /// <param name="arr">Массив.</param>
-        /// <returns>Расшифрованный масиив байт.</returns>
-        public byte[] Decrypt(byte[] arr)
+        public void Decrypt(ref byte[] arr)
         {
             if (arr.Length % BlockSize != 0)
             {
                 throw new Exception($"Можно расшифровать только целое количество блоков ({BlockSize} байт).");
             }
 
+            byte[] decriptArr = new byte[arr.Length];
+            Array.Copy(arr, decriptArr, arr.Length);
+
             Parallel.For(0, arr.Length / BlockSize, (i) =>
             {
-                Span<byte> span = new Span<byte>(arr, i * BlockSize, BlockSize);
+                Span<byte> span = new Span<byte>(decriptArr, i * BlockSize, BlockSize);
                 byte[] tmpBlock = span.ToArray();
                 DecryptBlock(tmpBlock);
                 tmpBlock.CopyTo(span);
             });
 
-            if (arr.Length == 0)
-            {
-                return Array.Empty<byte>();
-            }
+            byte lossByte = decriptArr[^1];
 
-            byte lossByte = arr[^1];
-
-            if (lossByte > arr.Length)
+            if (lossByte > decriptArr.Length)
             {
                 throw new Exception($"Данные зашифрованны не верно.");
             }
 
-            byte[] decriptArr = new byte[arr.Length - lossByte];
-            Array.Copy(arr, decriptArr, decriptArr.Length);
-
-            return decriptArr;
+            Array.Resize(ref decriptArr, decriptArr.Length - lossByte);
+            arr = decriptArr;
         }
 
         /// <summary>
