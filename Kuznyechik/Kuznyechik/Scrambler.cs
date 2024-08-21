@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Threading.Tasks;
 
 namespace Kuznyechik
@@ -17,6 +18,11 @@ namespace Kuznyechik
         /// Размер ключа.
         /// </summary>
         public const int KeySize = 32;
+
+        /// <summary>
+        /// Буффер для чтения из потока и одновлеменного шифрования блоков.
+        /// </summary>
+        private const int bufferSize = 256;
 
         /// <summary>
         /// Таблица для нелинейного преобразования.
@@ -340,6 +346,7 @@ namespace Kuznyechik
         /// Создание Шифратора.
         /// </summary>
         /// <param name="key">Ключ.</param>
+        /// <exception cref="ArgumentOutOfRangeException"></exception>
         public Scrambler(byte[] key)
         {
             if (key.Length != KeySize)
@@ -366,16 +373,185 @@ namespace Kuznyechik
         }
 
         /// <summary>
+        /// Шифрование массива блоков.
+        /// </summary>
+        /// <param name="arr">Массив.</param>
+        /// <exception cref="ArgumentException"></exception>
+        public void Encrypt(ref byte[] arr)
+        {
+            if (arr == null)
+            {
+                throw new ArgumentException("Массив данных не может быть равен null.");
+            }
+
+            int lossBytes = BlockSize - arr.Length % BlockSize;
+            Array.Resize(ref arr, arr.Length + lossBytes);
+            arr[^1] = (byte)lossBytes;
+            
+            Encrypt(arr);
+        }
+
+        /// <summary>
+        /// Шифрование данных из потока в поток.
+        /// </summary>
+        /// <param name="dataStream">Поток данных.</param>
+        /// <param name="encryptedStream">Выходной поток с зашифрованными данными.</param>
+        /// <exception cref="ArgumentException"></exception>
+        public void Encrypt(Stream dataStream, Stream encryptedStream)
+        {
+            if (dataStream == null)
+            {
+                throw new ArgumentException("Поток данных не может быть null.", nameof(dataStream));
+            }
+            else if (encryptedStream == null)
+            {
+                throw new ArgumentException("Поток с шифрованными данными не может быть null.", nameof(encryptedStream));
+            }
+            else if (!encryptedStream.CanWrite)
+            {
+                throw new ArgumentException("Поток для записи зашифрованных байт должен быть доступен для записи.", nameof(encryptedStream));
+            }
+            else if (dataStream == encryptedStream)
+            {
+                throw new ArgumentException("Нельзя выполнить чтение и запись в один и тотже поток.", nameof(encryptedStream));
+            }
+
+            byte loss = (byte)(BlockSize - dataStream.Length % BlockSize);
+            byte[] buffer = new byte[bufferSize];
+
+            for (int i = 0; i < dataStream.Length / bufferSize; i++)
+            {
+                dataStream.Read(buffer, 0, bufferSize);
+                Encrypt(buffer);
+                encryptedStream.Write(buffer, 0, bufferSize);
+            }
+
+            {
+                long leftByteCount = dataStream.Length - dataStream.Position;
+                buffer = new byte[leftByteCount + loss];
+                dataStream.Read(buffer, 0, (int)leftByteCount);
+                buffer[^1] = loss;
+            }
+            
+            Encrypt(buffer);
+            encryptedStream.Write(buffer, 0, buffer.Length);
+        }
+
+        /// <summary>
+        /// Расшифровка массива.
+        /// </summary>
+        /// <param name="arr">Массив.</param>
+        /// <exception cref="ArgumentException"></exception>
+        public void Decrypt(ref byte[] arr)
+        {
+            if (arr == null)
+            {
+                throw new ArgumentException("Массив данных не может быть равен null.");
+            }
+            else if (arr.Length % BlockSize != 0)
+            {
+                throw new ArgumentException($"Можно расшифровать только целое количество блоков ({BlockSize} байт).", nameof(arr));
+            }
+
+            Decrypt(arr);
+            byte lossByte = arr[^1];
+
+            if (lossByte > BlockSize)
+            {
+                throw new Exception($"Данные зашифрованны не верно.");
+            }
+
+            Array.Resize(ref arr, arr.Length - lossByte);
+        }
+
+        /// <summary>
+        /// Расшифровывание данных из потока в поток.
+        /// </summary>
+        /// <param name="dataStream">Поток данных.</param>
+        /// <param name="decryptedStream">Выходной поток с расшифрованными данными.</param>
+        /// <exception cref="ArgumentException"></exception>
+        public void Decrypt(Stream dataStream, Stream decryptedStream)
+        {
+            if (dataStream == null)
+            {
+                throw new ArgumentException("Поток данных не может быть null.", nameof(dataStream));
+            }
+            else if (decryptedStream == null)
+            {
+                throw new ArgumentException("Поток с шифрованными данными не может быть null.", nameof(decryptedStream));
+            }
+            else if (!decryptedStream.CanWrite)
+            {
+                throw new ArgumentException("Поток для записи зашифрованных байт должен быть доступен для записи.", nameof(decryptedStream));
+            }
+            else if (dataStream == decryptedStream)
+            {
+                throw new ArgumentException("Нельзя выполнить чтение и запись в один и тотже поток.", nameof(decryptedStream));
+            }
+
+            byte[] buffer = new byte[bufferSize];
+
+            for (int i = 0; i < dataStream.Length / bufferSize; i++)
+            {
+                dataStream.Read(buffer, 0, bufferSize);
+                Decrypt(buffer);
+                decryptedStream.Write(buffer, 0, bufferSize);
+            }
+
+            buffer = new byte[dataStream.Length - dataStream.Position];
+            dataStream.Read(buffer, 0, buffer.Length);
+            Decrypt(buffer);
+
+            byte loss = buffer[^1];
+            decryptedStream.Write(buffer, 0, buffer.Length - loss);
+        }
+
+        /// <summary>
+        /// Шифрование данных из массива.
+        /// </summary>
+        /// <param name="arr">Данные.</param>
+        private void Encrypt(byte[] arr)
+        {
+            ProcessBlocks(arr, EncryptBlock);
+        }
+
+        /// <summary>
+        /// Расшифровка данных из массива.
+        /// </summary>
+        /// <param name="arr">Данные.</param>
+        private void Decrypt(byte[] arr)
+        {
+            ProcessBlocks(arr, DecryptBlock);
+        }
+
+        /// <summary>
+        /// Шифрует или расшифровывает массив данных.
+        /// </summary>
+        /// <param name="arr">Массив данных.</param>
+        /// <param name="action">Метод шифрования или расшифровывания данных.</param>
+        /// <exception cref="ArgumentException"></exception>
+        private static void ProcessBlocks(byte[] arr, Action<byte[]> action)
+        {
+            if (arr.Length % BlockSize != 0)
+            {
+                throw new ArgumentException($"Массив данных должен быть кратен размеру блока ({BlockSize} байт).", nameof(arr));
+            }
+
+            Parallel.For(0, arr.Length / BlockSize, (i) =>
+            {
+                Span<byte> span = new Span<byte>(arr, i * BlockSize, BlockSize);
+                byte[] tmpBlock = span.ToArray();
+                action(tmpBlock);
+                tmpBlock.CopyTo(span);
+            });
+        }
+
+        /// <summary>
         /// Шифрование блока.
         /// </summary>
         /// <param name="block">Блок.</param>
-        public void EncryptBlock(byte[] block)
+        private void EncryptBlock(byte[] block)
         {
-            if (block.Length != BlockSize)
-            {
-                throw new ArgumentOutOfRangeException(nameof(block), $"Длина массива должна быть {BlockSize} байт.");
-            }
-
             for (int i = 0; i < 9; i++)
             {
                 ExclusiveOR(block, keys[i]);
@@ -387,39 +563,11 @@ namespace Kuznyechik
         }
 
         /// <summary>
-        /// Шифрование массива блоков.
-        /// </summary>
-        /// <param name="arr">Массив.</param>
-        public void Encrypt(ref byte[] arr)
-        {
-            int lossBytes = BlockSize - arr.Length % BlockSize;
-            byte[] encriptArr = new byte[arr.Length + lossBytes];
-            Array.Copy(arr, encriptArr, arr.Length);
-
-            encriptArr[^1] = (byte)lossBytes;
-
-            arr = encriptArr;
-
-            Parallel.For(0, encriptArr.Length / BlockSize, (i) =>
-            {
-                Span<byte> span = new Span<byte>(encriptArr, i * BlockSize, BlockSize);
-                byte[] tmpBlock = span.ToArray();
-                EncryptBlock(tmpBlock);
-                tmpBlock.CopyTo(span);
-            });
-        }
-
-        /// <summary>
         /// Расшифровка блока.
         /// </summary>
         /// <param name="block">Блок.</param>
-        public void DecryptBlock(byte[] block)
+        private void DecryptBlock(byte[] block)
         {
-            if (block.Length != BlockSize)
-            {
-                throw new ArgumentOutOfRangeException(nameof(block), $"Длина массива должна быть {BlockSize} байт.");
-            }
-
             ExclusiveOR(block, keys[9]);
 
             for (int i = 8; i >= 0; i--)
@@ -428,39 +576,6 @@ namespace Kuznyechik
                 ReplaceBytes(block, reversReplaceBytes);
                 ExclusiveOR(block, keys[i]);
             }
-        }
-
-        /// <summary>
-        /// Расшифровка массива.
-        /// </summary>
-        /// <param name="arr">Массив.</param>
-        public void Decrypt(ref byte[] arr)
-        {
-            if (arr.Length % BlockSize != 0)
-            {
-                throw new Exception($"Можно расшифровать только целое количество блоков ({BlockSize} байт).");
-            }
-
-            byte[] decriptArr = new byte[arr.Length];
-            Array.Copy(arr, decriptArr, arr.Length);
-
-            Parallel.For(0, arr.Length / BlockSize, (i) =>
-            {
-                Span<byte> span = new Span<byte>(decriptArr, i * BlockSize, BlockSize);
-                byte[] tmpBlock = span.ToArray();
-                DecryptBlock(tmpBlock);
-                tmpBlock.CopyTo(span);
-            });
-
-            byte lossByte = decriptArr[^1];
-
-            if (lossByte > decriptArr.Length)
-            {
-                throw new Exception($"Данные зашифрованны не верно.");
-            }
-
-            Array.Resize(ref decriptArr, decriptArr.Length - lossByte);
-            arr = decriptArr;
         }
 
         /// <summary>

@@ -1,7 +1,9 @@
 ﻿using Kuznyechik;
 using System;
+using System.IO;
 using System.Linq;
 using System.Text;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace KuznyechikTests
 {
@@ -11,6 +13,7 @@ namespace KuznyechikTests
         [TestMethod("Шифрование и дешифрование строк")]
         [DataRow("Привет мир!")]
         [DataRow("1234567890")]
+        [DataRow("")]
         public void EncryptTest(string text)
         {
             byte[] key = new byte[32];
@@ -35,8 +38,8 @@ namespace KuznyechikTests
         public void EncryptBigDataTest()
         {
             byte[] key = new byte[32];
-            byte[] message = new byte[16777216];
-            byte[] messageCopy = new byte[16777216];
+            byte[] message = new byte[4194304];
+            byte[] messageCopy = new byte[4194304];
 
             {
                 Random random = new Random();
@@ -48,6 +51,32 @@ namespace KuznyechikTests
             Scrambler scrambler = new Scrambler(key);
             scrambler.Encrypt(ref message);
             scrambler.Decrypt(ref message);
+
+            Assert.IsTrue(message.SequenceEqual(messageCopy));
+        }
+
+        [TestMethod("Шифрование и дешифрование потока")]
+        [DataRow("Привет мир!")]
+        [DataRow("1234567890")]
+        [DataRow("1234567890")]
+        public void EncryptStream(string text)
+        {
+            byte[] key = new byte[32];
+            byte[] message = Encoding.UTF8.GetBytes(text);
+            byte[] messageCopy = (byte[])message.Clone();
+
+            MemoryStream dataStream = new MemoryStream(message);
+            MemoryStream encryptedStream = new MemoryStream();
+
+            {
+                Random random = new Random();
+                random.NextBytes(key);
+            }
+
+            Scrambler scrambler = new Scrambler(key);
+            scrambler.Encrypt(dataStream, encryptedStream);
+            dataStream.Position = encryptedStream.Position = 0;
+            scrambler.Decrypt(encryptedStream, dataStream);
 
             Assert.IsTrue(message.SequenceEqual(messageCopy));
         }
