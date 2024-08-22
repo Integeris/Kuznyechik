@@ -65,18 +65,19 @@ namespace KuznyechikTests
             byte[] message = Encoding.UTF8.GetBytes(text);
             byte[] messageCopy = (byte[])message.Clone();
 
-            MemoryStream dataStream = new MemoryStream(message);
-            MemoryStream encryptedStream = new MemoryStream();
-
+            using (MemoryStream dataStream = new MemoryStream(message))
             {
-                Random random = new Random();
-                random.NextBytes(key);
-            }
+                using (MemoryStream encryptedStream = new MemoryStream())
+                {
+                    Random random = new Random();
+                    random.NextBytes(key);
 
-            Scrambler scrambler = new Scrambler(key);
-            scrambler.Encrypt(dataStream, encryptedStream);
-            dataStream.Position = encryptedStream.Position = 0;
-            scrambler.Decrypt(encryptedStream, dataStream);
+                    Scrambler scrambler = new Scrambler(key);
+                    scrambler.Encrypt(dataStream, encryptedStream);
+                    dataStream.Position = encryptedStream.Position = 0;
+                    scrambler.Decrypt(encryptedStream, dataStream);
+                }
+            }
 
             Assert.IsTrue(message.SequenceEqual(messageCopy));
         }
