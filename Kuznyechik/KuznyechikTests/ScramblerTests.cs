@@ -35,7 +35,14 @@ namespace KuznyechikTests
         }
 
         [TestMethod("Шифрование и дешифрование большого объёма данных")]
-        public void EncryptBigDataTest()
+        [DataRow(128)]
+        [DataRow(256)]
+        [DataRow(512)]
+        [DataRow(1024)]
+        [DataRow(2048)]
+        [DataRow(4096)]
+        [DataRow(8192)]
+        public void EncryptBigDataTest(int bufferSize)
         {
             byte[] key = new byte[32];
             byte[] message = new byte[4194304];
@@ -48,7 +55,10 @@ namespace KuznyechikTests
                 Array.Copy(message, messageCopy, message.Length);
             }
 
-            Scrambler scrambler = new Scrambler(key);
+            Scrambler scrambler = new Scrambler(key)
+            {
+                BufferSize = bufferSize
+            };
             scrambler.Encrypt(ref message);
             scrambler.Decrypt(ref message);
 

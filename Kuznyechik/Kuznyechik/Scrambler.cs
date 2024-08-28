@@ -20,9 +20,9 @@ namespace Kuznyechik
         public const int KeySize = 32;
 
         /// <summary>
-        /// Буффер для чтения из потока и одновлеменного шифрования блоков.
+        /// Количество байт для одновременного шифрования и расшифровки (из потока).
         /// </summary>
-        private const int bufferSize = 256;
+        private int bufferSize;
 
         /// <summary>
         /// Таблица для нелинейного преобразования.
@@ -338,9 +338,61 @@ namespace Kuznyechik
         };
 
         /// <summary>
-        /// Ключи.
+        /// Раундовые ключи.
         /// </summary>
         private readonly byte[][] keys;
+
+        /// <summary>
+        /// Ключ.
+        /// </summary>
+        private byte[] key;
+
+        /// <summary>
+        /// Количество байт для одновременного шифрования и расшифровки (из потока).
+        /// </summary>
+        public int BufferSize
+        {
+            get => bufferSize;
+            set
+            {
+                if (value <= 0)
+                {
+                    throw new ArgumentException("Размер буфера не может быть меньше или равен нулю.", nameof(BufferSize));
+                }
+                else if (value % BlockSize != 0)
+                {
+                    throw new ArgumentException($"Размер буфера должен быть кратен размеру блока({BlockSize} байт).", nameof(BufferSize));
+                }
+
+                bufferSize = value;
+            }
+        }
+
+        /// <summary>
+        /// Ключ.
+        /// </summary>
+        public byte[] Key
+        {
+            get => key;
+            set
+            {
+                if (value == null)
+                {
+                    throw new ArgumentException("Ключ не может быть null.", nameof(Key));
+                }
+                else if (value.Length != KeySize)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(Key), $"Длинна ключа должна быть {KeySize} байта.");
+                }
+
+                key = value;
+
+                Array.Copy(value, keys[0], BlockSize);
+                Array.Copy(value, BlockSize, keys[1], 0, BlockSize);
+
+                GenerationRoundKeys();
+            }
+        }
 
         /// <summary>
         /// Создание Шифратора.
@@ -349,27 +401,29 @@ namespace Kuznyechik
         /// <exception cref="ArgumentOutOfRangeException"></exception>
         public Scrambler(byte[] key)
         {
-            if (key.Length != KeySize)
-            {
-                throw new ArgumentOutOfRangeException(nameof(key), $"Длинна ключа должна быть {KeySize} байта.");
-            }
+            bufferSize = 256;
 
             linearTransformation = new byte[]
             {
-                1, 148, 32, 133, 16, 194, 192, 1, 251, 1, 192, 194, 16, 133, 32, 148
+                1, 148, 32, 133, 16, 194, 192, 1, 
+                251, 1, 192, 194, 16, 133, 32, 148
             };
 
-            keys = new byte[10][];
-
-            for (int i = 0; i < keys.Length; i++)
+            keys = new byte[10][]
             {
-                keys[i] = new byte[BlockSize];
-            }
+                new byte[BlockSize],
+                new byte[BlockSize],
+                new byte[BlockSize],
+                new byte[BlockSize],
+                new byte[BlockSize],
+                new byte[BlockSize],
+                new byte[BlockSize],
+                new byte[BlockSize],
+                new byte[BlockSize],
+                new byte[BlockSize]
+            };
 
-            Array.Copy(key, keys[0], BlockSize);
-            Array.Copy(key, BlockSize, keys[1], 0, BlockSize);
-
-            GenerationRoundKeys();
+            Key = key;
         }
 
         /// <summary>
@@ -689,21 +743,21 @@ namespace Kuznyechik
         /// <summary>
         /// Ячейка Фейстеля.
         /// </summary>
-        /// <param name="firstKeys">Первый ключ.</param>
+        /// <param name="firstKey">Первый ключ.</param>
         /// <param name="secondKey">Второй ключ.</param>
         /// <param name="constants">Константы.</param>
-        private void FeistelCell(byte[] firstKeys, byte[] secondKey, byte[] constants)
+        private void FeistelCell(byte[] firstKey, byte[] secondKey, byte[] constants)
         {
-            byte[] tmpKey = new byte[firstKeys.Length];
-            Array.Copy(firstKeys, tmpKey, firstKeys.Length);
+            byte[] tmpKey = new byte[firstKey.Length];
+            Array.Copy(firstKey, tmpKey, firstKey.Length);
 
             ExclusiveOR(tmpKey, constants);
             ReplaceBytes(tmpKey, replaceBytes);
             MultiTransform(tmpKey, TransformBlock);
             ExclusiveOR(tmpKey, secondKey);
 
-            Array.Copy(firstKeys, secondKey, firstKeys.Length);
-            Array.Copy(tmpKey, firstKeys, tmpKey.Length);
+            Array.Copy(firstKey, secondKey, firstKey.Length);
+            Array.Copy(tmpKey, firstKey, tmpKey.Length);
         }
 
         /// <summary>

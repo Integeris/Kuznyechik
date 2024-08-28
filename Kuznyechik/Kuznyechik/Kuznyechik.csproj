@@ -6,13 +6,14 @@
     <Nullable>disable</Nullable>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <SignAssembly>False</SignAssembly>
-    <Title>Кузнечик (ГОСТ 34.12-2015)</Title>
-    <Description>Библиотека для шифрования данных с помощью алгоритма "Кузнечик" из ГОСТ 34.12-2015.</Description>
+    <Title>Кузнечик (ГОСТ 34.12-2018)</Title>
+    <Description>Библиотека для шифрования данных с помощью алгоритма "Кузнечик" из ГОСТ 34.12-2018.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/Integeris/Kuznyechik.git</RepositoryUrl>
     <Authors>Integer (Черняков Антон)</Authors>
     <Company />
-    <PackageTags>Kuznyechik;Cryptography;Encryption;GOST;GOST 34.12-2015</PackageTags>
+    <PackageTags>Kuznyechik;Cryptography;Encryption;GOST;GOST 34.12-2015;GOST 34.12-2018;ГОСТ 34.12-2015;ГОСТ 34.12-2018</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
