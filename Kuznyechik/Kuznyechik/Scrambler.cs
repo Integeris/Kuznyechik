@@ -373,7 +373,7 @@ namespace Kuznyechik
         /// </summary>
         public byte[] Key
         {
-            get => key;
+            get => (byte[])key.Clone();
             set
             {
                 if (value == null)
