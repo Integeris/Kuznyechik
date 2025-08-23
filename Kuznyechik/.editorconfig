@@ -65,6 +65,9 @@ csharp_style_prefer_utf8_string_literals = true:suggestion
 csharp_prefer_simple_using_statement = false:suggestion
 csharp_using_directive_placement = outside_namespace:silent
 
+# IDE0290: Использовать основной конструктор
+csharp_style_prefer_primary_constructors = false
+
 [*.vb]
 #### Стили именования ####
 

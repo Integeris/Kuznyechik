@@ -1,8 +1,12 @@
-﻿using Kuznyechik;
+﻿using ILGPU.Runtime;
+using Kuznyechik;
 using System;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace KuznyechikTests
 {
@@ -10,10 +14,10 @@ namespace KuznyechikTests
     public class ScramblerTests
     {
         [TestMethod("Шифрование и дешифрование строк")]
-        [DataRow("Привет мир!")]
-        [DataRow("1234567890")]
-        [DataRow("")]
-        public void EncryptTest(string text)
+        [DataRow("Привет мир!", DisplayName = "Привет мир!")]
+        [DataRow("1234567890", DisplayName = "1234567890")]
+        [DataRow("", DisplayName = "Пустая строка")]
+        public void EncryptArr(string text)
         {
             byte[] key = new byte[32];
             byte[] message = Encoding.UTF8.GetBytes(text);
@@ -23,72 +27,238 @@ namespace KuznyechikTests
                 random.NextBytes(key);
             }
 
-            Scrambler scrambler = new Scrambler(key);
-
-            scrambler.Encrypt(ref message);
-            scrambler.Decrypt(ref message);
+            using (Scrambler scrambler = new Scrambler(key))
+            {
+                scrambler.Encrypt(ref message);
+                scrambler.Decrypt(ref message);
+            }
 
             string outText = Encoding.UTF8.GetString(message);
-
             Assert.AreEqual(text, outText);
         }
 
-        [TestMethod("Шифрование и дешифрование большого объёма данных")]
-        [DataRow(128)]
-        [DataRow(256)]
-        [DataRow(512)]
-        [DataRow(1024)]
-        [DataRow(2048)]
-        [DataRow(4096)]
-        [DataRow(8192)]
-        public void EncryptBigDataTest(int bufferSize)
-        {
-            byte[] key = new byte[32];
-            byte[] message = new byte[4194304];
-            byte[] messageCopy = new byte[4194304];
-
-            {
-                Random random = new Random();
-                random.NextBytes(key);
-                random.NextBytes(message);
-                Array.Copy(message, messageCopy, message.Length);
-            }
-
-            Scrambler scrambler = new Scrambler(key)
-            {
-                BufferSize = bufferSize
-            };
-            scrambler.Encrypt(ref message);
-            scrambler.Decrypt(ref message);
-
-            Assert.IsTrue(message.SequenceEqual(messageCopy));
-        }
-
         [TestMethod("Шифрование и дешифрование потока")]
-        [DataRow("Привет мир!")]
-        [DataRow("1234567890")]
-        [DataRow("1234567890")]
+        [DataRow("Привет мир!", DisplayName = "Привет мир!")]
+        [DataRow("1234567890", DisplayName = "1234567890")]
         public void EncryptStream(string text)
         {
             byte[] key = new byte[32];
             byte[] message = Encoding.UTF8.GetBytes(text);
             byte[] messageCopy = (byte[])message.Clone();
 
-            using (MemoryStream dataStream = new MemoryStream(message))
             {
-                using (MemoryStream encryptedStream = new MemoryStream())
-                {
-                    Random random = new Random();
-                    random.NextBytes(key);
+                Random random = new Random();
+                random.NextBytes(key);
+            }
 
-                    Scrambler scrambler = new Scrambler(key);
-                    scrambler.Encrypt(dataStream, encryptedStream);
-                    dataStream.Position = encryptedStream.Position = 0;
-                    scrambler.Decrypt(encryptedStream, dataStream);
-                }
+            using (MemoryStream dataStream = new MemoryStream())
+            using (MemoryStream encryptedStream = new MemoryStream())
+            using (Scrambler scrambler = new Scrambler(key))
+            {
+                dataStream.Write(messageCopy, 0, messageCopy.Length);
+                dataStream.Seek(0, SeekOrigin.Begin);
+
+                scrambler.Encrypt(dataStream, encryptedStream);
+                dataStream.Position = encryptedStream.Position = 0;
+                scrambler.Decrypt(encryptedStream, dataStream);
+
+                dataStream.Position = 0;
+                dataStream.Read(messageCopy, 0, messageCopy.Length);
             }
 
             Assert.IsTrue(message.SequenceEqual(messageCopy));
+        }
+
+        [TestMethod("Шифрование и дешифрование большого объёма данных")]
+        [DataRow(201326592, DisplayName = "201326592 байт")]
+        [DataRow(402653184, DisplayName = "402653184 байт")]
+        [DataRow(805306368, DisplayName = "805306368 байт")]
+        public void EncryptBigData(long arraySize)
+        {
+            byte[] key = new byte[32];
+            byte[] arr = new byte[arraySize];
+
+            {
+                Random random = new Random();
+                random.NextBytes(key);
+                random.NextBytes(arr);
+            }
+
+            byte[] arrCopy = new byte[arr.Length];
+            Array.Copy(arr, arrCopy, arr.Length);
+
+            using (Scrambler scrambler = new Scrambler(key))
+            {
+                scrambler.Encrypt(ref arrCopy);
+                scrambler.Decrypt(ref arrCopy);
+            }
+
+            Assert.IsTrue(arr.SequenceEqual(arrCopy));
+        }
+
+        [TestMethod("Шифрование и дешифрование строк асинхронно")]
+        [DataRow("Привет мир!", DisplayName = "Привет мир!")]
+        [DataRow("1234567890", DisplayName = "1234567890")]
+        [DataRow("", DisplayName = "Пустая строка")]
+        public async Task EncryptAsyncArr(string text)
+        {
+            byte[] key = new byte[32];
+            byte[] message = Encoding.UTF8.GetBytes(text);
+
+            {
+                Random random = new Random();
+                random.NextBytes(key);
+            }
+
+            using (Scrambler scrambler = new Scrambler(key))
+            {
+                message = await scrambler.EncryptAsync(message);
+                message = await scrambler.DecryptAsync(message);
+            }
+
+            string outText = Encoding.UTF8.GetString(message);
+            Assert.AreEqual(text, outText);
+        }
+
+        [TestMethod("Шифрование и дешифрование потока асинхронно")]
+        [DataRow("Привет мир!", DisplayName = "Привет мир!")]
+        [DataRow("1234567890", DisplayName = "1234567890")]
+        public async Task EncryptAsyncStream(string text)
+        {
+            byte[] key = new byte[32];
+            byte[] message = Encoding.UTF8.GetBytes(text);
+            byte[] messageCopy = (byte[])message.Clone();
+
+            {
+                Random random = new Random();
+                random.NextBytes(key);
+            }
+
+            using (MemoryStream dataStream = new MemoryStream())
+            using (MemoryStream encryptedStream = new MemoryStream())
+            using (Scrambler scrambler = new Scrambler(key))
+            {
+                dataStream.Write(messageCopy, 0, messageCopy.Length);
+                dataStream.Seek(0, SeekOrigin.Begin);
+
+                await scrambler.EncryptAsync(dataStream, encryptedStream);
+                dataStream.Position = encryptedStream.Position = 0;
+                await scrambler.DecryptAsync(encryptedStream, dataStream);
+
+                dataStream.Position = 0;
+                dataStream.Read(messageCopy, 0, messageCopy.Length);
+            }
+
+            Assert.IsTrue(message.SequenceEqual(messageCopy));
+        }
+
+        [TestMethod("Отмена асинхронного шифрования данных")]
+        [DataRow(805306368)]
+        public async Task CancelEncryptAsync(long arraySize)
+        {
+            byte[] key = new byte[32];
+            byte[] arr = new byte[arraySize];
+
+            {
+                Random random = new Random();
+                random.NextBytes(key);
+                random.NextBytes(arr);
+            }
+
+            byte[] arrCopy = new byte[arr.Length];
+            Array.Copy(arr, arrCopy, arr.Length);
+
+            using (Scrambler scrambler = new Scrambler(key))
+            {
+                CancellationTokenSource cancellationToken = new CancellationTokenSource();
+                Task task = scrambler.EncryptAsync(arr, cancellationToken: cancellationToken.Token);
+                cancellationToken.CancelAfter(100);
+
+                try
+                {
+                    await task;
+                    Assert.Fail($"Ожидалась {nameof(OperationCanceledException)}");
+                }
+                catch (OperationCanceledException)
+                {
+                    Assert.IsTrue(true);
+                }
+                catch (Exception ex)
+                {
+                    Assert.Fail($"Ожидалась {nameof(OperationCanceledException)}, но получено {ex.GetType()}");
+                }
+            }
+        }
+
+        [TestMethod("Проверка прогресса асинхронного шифрования данных")]
+        [DataRow(1610612736, DisplayName = "1610612736")]
+        public void ProgressEncryptAsync(long arraySize)
+        {
+            byte[] key = new byte[32];
+            byte[] arr = new byte[arraySize];
+
+            {
+                Random random = new Random();
+                random.NextBytes(key);
+                random.NextBytes(arr);
+            }
+
+            byte[] arrCopy = new byte[arr.Length];
+            Array.Copy(arr, arrCopy, arr.Length);
+
+            using (Scrambler scrambler = new Scrambler(key))
+            {
+                Progress<CryptoStatus> progress = new Progress<CryptoStatus>((status) =>
+                {
+                    Console.WriteLine("Позиция {0} из {1} (буфер: {2}). Процент: {3:P2}",
+                        status.DataPosition,
+                        status.DataLength,
+                        status.BufferLength,
+                        status.DataPosition / status.DataLength);
+                });
+
+                CancellationTokenSource cancellationToken = new CancellationTokenSource();
+                Task task = scrambler.EncryptAsync(arr, progress, cancellationToken.Token);
+
+                cancellationToken.CancelAfter(10000);
+                task.Wait();
+
+                Assert.IsTrue(true);
+            }
+        }
+
+        [TestMethod("Вывод устройств")]
+        public void WriteDevice()
+        {
+            byte[] key = new byte[32];
+
+            {
+                Random random = new Random();
+                random.NextBytes(key);
+            }
+
+            using (Scrambler scrambler = new Scrambler(key))
+            {
+                Console.WriteLine("Текущее устройство:");
+                Console.WriteLine(scrambler.Device);
+                Console.WriteLine();
+                Console.WriteLine("Все устройства:");
+
+                ImmutableArray<Device> devices = scrambler.GetDevices();
+
+                foreach (Device device in devices)
+                {
+                    Console.WriteLine(device);
+                }
+
+                scrambler.Device = devices[1];
+
+                Console.WriteLine();
+                Console.WriteLine("Новое устройство:");
+                Console.WriteLine(scrambler.Device);
+            }
+
+            Assert.IsTrue(true);
         }
     }
 }
