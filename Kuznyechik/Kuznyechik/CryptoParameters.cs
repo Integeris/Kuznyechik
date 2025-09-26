@@ -4,7 +4,7 @@ using System.Collections.Immutable;
 namespace Kuznyechik
 {
     /// <summary>
-    /// Параметров для работы алгоритма.
+    /// Параметры для работы алгоритма.
     /// </summary>
     public struct CryptoParameters
     {

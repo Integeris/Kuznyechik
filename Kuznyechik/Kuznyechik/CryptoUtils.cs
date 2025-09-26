@@ -148,6 +148,7 @@ namespace Kuznyechik
         /// <returns>Результат умножения по Галуа.</returns>
         private static byte GaloisMultiplication(byte origin, byte key)
         {
+            // TODO: Сделать генерацию таблицы с заранее вычисленными значениями 256 * 256
             byte result = 0;
 
             // цикл для каждого бита (в байте 8 битов)

@@ -21,6 +21,8 @@ namespace Kuznyechik
             ArrayView<byte> linearTransformation, 
             ArrayView<byte> replaceBytes)
         {
+            // TODO: Создать структуру для передачипараметров пачкой.
+
             ArrayView<byte> block = GetCurrentBlock(index, arr);
             CryptoUtils.EncryptBlock(block, keys, linearTransformation, replaceBytes);
         }

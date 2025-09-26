@@ -78,9 +78,8 @@ namespace Kuznyechik
                 .Cuda()
                 .OpenCL()
                 .CPU()
-                .Math(MathMode.Default)
-                .AutoDebug()
-                .Optimize(OptimizationLevel.O0);
+                .Math(MathMode.Fast)
+                .Optimize(OptimizationLevel.O2);
             });
 
             Device = context.GetPreferredDevice(false);
