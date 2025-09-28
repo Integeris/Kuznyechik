@@ -208,14 +208,12 @@ namespace KuznyechikTests
 
             using (Scrambler scrambler = new Scrambler(key))
             {
-                Progress<CryptoStatus> progress = new Progress<CryptoStatus>((status) =>
-                {
+                Progress<CryptoStatus> progress = new Progress<CryptoStatus>((status) => 
                     Console.WriteLine("Позиция {0} из {1} (буфер: {2}). Процент: {3:P2}",
                         status.DataPosition,
                         status.DataLength,
                         status.BufferLength,
-                        status.DataPosition / status.DataLength);
-                });
+                        status.DataPosition / status.DataLength));
 
                 CancellationTokenSource cancellationToken = new CancellationTokenSource();
                 Task task = scrambler.EncryptAsync(arr, progress, cancellationToken.Token);

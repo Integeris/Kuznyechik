@@ -46,7 +46,7 @@ namespace Kuznyechik
         /// </summary>
         public CryptoParameters Parameters
         {
-            get => parameters;
+            get => this.parameters;
         }
 
         /// <summary>
@@ -54,13 +54,13 @@ namespace Kuznyechik
         /// </summary>
         public Device Device
         {
-            get => device;
+            get => this.device;
             set
             {
-                accelerator?.Dispose();
+                this.accelerator?.Dispose();
 
-                device = value;
-                accelerator = device.CreateAccelerator(context);
+                this.device = value;
+                this.accelerator = this.device.CreateAccelerator(this.context);
             }
         }
 
@@ -72,17 +72,14 @@ namespace Kuznyechik
         {
             this.parameters = parameters;
 
-            context = Context.Create(builder =>
-            {
-                builder
+            this.context = Context.Create(builder => builder
                 .Cuda()
                 .OpenCL()
                 .CPU()
                 .Math(MathMode.Fast)
-                .Optimize(OptimizationLevel.O2);
-            });
+                .Optimize(OptimizationLevel.O2));
 
-            Device = context.GetPreferredDevice(false);
+            this.Device = this.context.GetPreferredDevice(false);
         }
 
         /// <summary>
@@ -96,7 +93,7 @@ namespace Kuznyechik
         /// </summary>
         ~Scrambler()
         {
-            Dispose();
+            this.Dispose();
         }
 
         /// <summary>
@@ -111,7 +108,7 @@ namespace Kuznyechik
             {
                 dataStream.Write(arr, 0, arr.Length);
                 dataStream.Position = 0;
-                Encrypt(dataStream, encryptedStream);
+                this.Encrypt(dataStream, encryptedStream);
                 arr = encryptedStream.ToArray();
             }
         }
@@ -124,8 +121,8 @@ namespace Kuznyechik
         /// <exception cref="ArgumentException"></exception>
         public void Encrypt(Stream dataStream, Stream encryptedStream)
         {
-            ProcessData(dataStream, encryptedStream, Kernel.Encrypt, parameters.ReplaceBytes);
-            AddBlockPadding(dataStream, encryptedStream);
+            this.ProcessData(dataStream, encryptedStream, Kernel.Encrypt, this.parameters.ReplaceBytes);
+            this.AddBlockPadding(dataStream, encryptedStream);
         }
 
         /// <summary>
@@ -146,7 +143,7 @@ namespace Kuznyechik
             {
                 dataStream.Write(arr, 0, arr.Length);
                 dataStream.Position = 0;
-                await EncryptAsync(dataStream, encryptedStream, progress, cancellationToken);
+                await this.EncryptAsync(dataStream, encryptedStream, progress, cancellationToken);
                 return encryptedStream.ToArray();
             }
         }
@@ -167,15 +164,15 @@ namespace Kuznyechik
         {
             await Task.Run(() =>
             {
-                ProcessData(
+                this.ProcessData(
                     dataStream,
                     encryptedStream,
                     Kernel.Encrypt,
-                    parameters.ReplaceBytes,
+                    this.parameters.ReplaceBytes,
                     progress,
                     cancellationToken);
 
-                AddBlockPadding(dataStream, encryptedStream);
+                this.AddBlockPadding(dataStream, encryptedStream);
             });
         }
 
@@ -191,7 +188,7 @@ namespace Kuznyechik
             {
                 dataStream.Write(arr, 0, arr.Length);
                 dataStream.Position = 0;
-                Decrypt(dataStream, decryptedStream);
+                this.Decrypt(dataStream, decryptedStream);
                 arr = decryptedStream.ToArray();
             }
         }
@@ -204,9 +201,9 @@ namespace Kuznyechik
         /// <exception cref="ArgumentException"></exception>
         public void Decrypt(Stream dataStream, Stream decryptedStream)
         {
-            CheckDecryptStream(dataStream, decryptedStream);
-            ProcessData(dataStream, decryptedStream, Kernel.Decrypt, parameters.ReverseReplaceBytes);
-            RemoveDecryptPadding(decryptedStream);
+            this.CheckDecryptStream(dataStream, decryptedStream);
+            this.ProcessData(dataStream, decryptedStream, Kernel.Decrypt, this.parameters.ReverseReplaceBytes);
+            this.RemoveDecryptPadding(decryptedStream);
         }
 
         /// <summary>
@@ -226,7 +223,7 @@ namespace Kuznyechik
             {
                 dataStream.Write(arr, 0, arr.Length);
                 dataStream.Position = 0;
-                await DecryptAsync(dataStream, decryptedStream, progress, cancellationToken);
+                await this.DecryptAsync(dataStream, decryptedStream, progress, cancellationToken);
                 return decryptedStream.ToArray();
             }
         }
@@ -248,17 +245,17 @@ namespace Kuznyechik
         {
             await Task.Run(() =>
             {
-                CheckDecryptStream(dataStream, decryptedStream);
+                this.CheckDecryptStream(dataStream, decryptedStream);
 
-                ProcessData(
+                this.ProcessData(
                     dataStream,
                     decryptedStream,
                     Kernel.Decrypt,
-                    parameters.ReverseReplaceBytes,
+                    this.parameters.ReverseReplaceBytes,
                     progress,
                     cancellationToken);
 
-                RemoveDecryptPadding(decryptedStream);
+                this.RemoveDecryptPadding(decryptedStream);
             });
         }
 
@@ -267,17 +264,17 @@ namespace Kuznyechik
         /// </summary>
         public void Dispose()
         {
-            if (disposed)
+            if (this.disposed)
             {
                 return;
             }
 
-            accelerator.Dispose();
-            context.Dispose();
-            device = null;
+            this.accelerator.Dispose();
+            this.context.Dispose();
+            this.device = null;
 
             GC.SuppressFinalize(this);
-            disposed = true;
+            this.disposed = true;
         }
 
         /// <summary>
@@ -286,7 +283,7 @@ namespace Kuznyechik
         /// <returns>Все устройства.</returns>
         public ImmutableArray<Device> GetDevices()
         {
-            return context.Devices;
+            return this.context.Devices;
         }
 
         /// <summary>
@@ -338,7 +335,7 @@ namespace Kuznyechik
                 throw new ArgumentException("Поток записи должен быть доступен для чтения.", nameof(writeStream));
             }
 
-            CheckStreams(dataStream, writeStream);
+            this.CheckStreams(dataStream, writeStream);
         }
 
         /// <summary>
@@ -357,7 +354,7 @@ namespace Kuznyechik
 
             using (MemoryStream paddingStream = new MemoryStream(padding))
             {
-                ProcessData(paddingStream, encryptedStream, Kernel.Encrypt, parameters.ReplaceBytes);
+                this.ProcessData(paddingStream, encryptedStream, Kernel.Encrypt, this.parameters.ReplaceBytes);
             }
         }
 
@@ -392,15 +389,13 @@ namespace Kuznyechik
             Stream dataStream, 
             Stream writeStream, 
             Action<Index1D,
-                ArrayView<byte>,
-                ArrayView<byte>,
-                ArrayView<byte>,
-                ArrayView<byte>> action, 
+                KernelData> action, 
             byte[] replaceBytes,
             IProgress<CryptoStatus> progress = default,
             CancellationToken cancellationToken = default)
         {
-            long usefulDataLength = dataStream.Length - (dataStream.Length % CryptoUtils.BlockSize);
+            // TODO: Переписать метод так,чтобы маленький буффер брался из потока и запсывался в память видеокарты.
+            long usefulDataLength = dataStream.Length - dataStream.Length % CryptoUtils.BlockSize;
 
             if (usefulDataLength == 0)
             {
@@ -410,18 +405,26 @@ namespace Kuznyechik
             dataStream.Position = 0;
             progress ??= new Progress<CryptoStatus>();
 
-            using (MemoryBuffer1D<byte, Stride1D.Dense> keysBuffer = 
-                accelerator.Allocate1D(parameters.FlatKeys))
-            using (MemoryBuffer1D<byte, Stride1D.Dense> linearTransformationBuffer = 
-                accelerator.Allocate1D(parameters.LinearTransformation))
-            using (MemoryBuffer1D<byte, Stride1D.Dense> replaceBytesBuffer = 
-                accelerator.Allocate1D(replaceBytes))
+            using (MemoryBuffer1D<byte, Stride1D.Dense> keysBuffer =
+                this.accelerator.Allocate1D(this.parameters.FlatKeys))
+            using (MemoryBuffer1D<byte, Stride1D.Dense> linearTransformationBuffer =
+                this.accelerator.Allocate1D(this.parameters.LinearTransformation))
+            using (MemoryBuffer1D<byte, Stride1D.Dense> replaceBytesBuffer =
+                this.accelerator.Allocate1D(replaceBytes))
             {
-                var kernel = accelerator.LoadAutoGroupedStreamKernel(action);
+                KernelData kernelData = new KernelData()
+                {
+                    Keys = keysBuffer.View,
+                    LinearTransformation = linearTransformationBuffer.View,
+                    ReplaceBytes = replaceBytesBuffer.View
+                };
+
+                Action<Index1D, KernelData> kernel = 
+                    this.accelerator.LoadAutoGroupedStreamKernel(action);
 
                 for (long i = usefulDataLength; i > 0;)
                 {
-                    using (MemoryBuffer1D<byte, Stride1D.Dense> dataBuffer = GetMaxBuffer(i))
+                    using (MemoryBuffer1D<byte, Stride1D.Dense> dataBuffer = this.GetMaxBuffer(i))
                     {
                         cancellationToken.ThrowIfCancellationRequested();
 
@@ -431,8 +434,9 @@ namespace Kuznyechik
                         dataStream.Read(buffer, 0, buffer.Length);
                         dataBuffer.CopyFromCPU(buffer);
 
-                        kernel(index, dataBuffer.View, keysBuffer.View, linearTransformationBuffer.View, replaceBytesBuffer.View);
-                        accelerator.Synchronize();
+                        kernelData.Data = dataBuffer.View;
+                        kernel(index, kernelData);
+                        this.accelerator.Synchronize();
 
                         dataBuffer.CopyToCPU(buffer);
                         writeStream.Write(buffer, 0, buffer.Length);
@@ -455,15 +459,14 @@ namespace Kuznyechik
         /// <exception cref="OutOfMemoryException"></exception>
         private MemoryBuffer1D<byte, Stride1D.Dense> GetMaxBuffer(long initSize)
         {
-            initSize = Math.Min(initSize, device.MemorySize);
+            initSize = Math.Min(initSize, (long)(this.device.MemorySize * 0.8));
 
             for (; initSize >= CryptoUtils.BlockSize; initSize = (long)(initSize * 0.8))
             {
                 try
                 {
-                    byte[] test = new byte[initSize];
                     initSize -= initSize % CryptoUtils.BlockSize;
-                    return accelerator.Allocate1D<byte>(initSize);
+                    return this.accelerator.Allocate1D<byte>(initSize);
                 }
                 catch (Exception) { }
             }

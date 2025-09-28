@@ -22,23 +22,21 @@ namespace Kuznyechik
         /// Шифрование блока.
         /// </summary>
         /// <param name="block">Блок.</param>
-        /// <param name="keys">Ключи.</param>
-        /// <param name="linearTransformation">Байты линейной трансформации.</param>
-        /// <param name="replaceBytes">Таблица для нелинейного преобразования.</param>
-        internal static void EncryptBlock(ArrayView<byte> block, ArrayView<byte> keys, ArrayView<byte> linearTransformation, ArrayView<byte> replaceBytes)
+        /// <param name="data">Данные.</param>
+        internal static void EncryptBlock(ArrayView<byte> block, KernelData data)
         {
             ArrayView<byte> key;
 
             for (int i = 0; i < 9; i++)
             {
-                key = keys.SubView(i * BlockSize, BlockSize);
+                key = data.Keys.SubView(i * BlockSize, BlockSize);
 
                 ExclusiveOR(block, key);
-                ReplaceBytes(block, replaceBytes);
-                MultiTransformEncrypt(block, linearTransformation);
+                ReplaceBytes(block, data);
+                MultiTransformEncrypt(block, data);
             }
 
-            key = keys.SubView(9 * BlockSize, BlockSize);
+            key = data.Keys.SubView(9 * BlockSize, BlockSize);
             ExclusiveOR(block, key);
         }
 
@@ -46,20 +44,18 @@ namespace Kuznyechik
         /// Расшифрование блока.
         /// </summary>
         /// <param name="block">Блок.</param>
-        /// <param name="keys">Ключи.</param>
-        /// <param name="linearTransformation">Байты линейной трансформации.</param>
-        /// <param name="reversReplaceBytes">Таблица для обратного нелинейного преобразования.</param>
-        internal static void DecryptBlock(ArrayView<byte> block, ArrayView<byte> keys, ArrayView<byte> linearTransformation, ArrayView<byte> reversReplaceBytes)
+        /// <param name="data">Данные.</param>
+        internal static void DecryptBlock(ArrayView<byte> block, KernelData data)
         {
-            ArrayView<byte> key = keys.SubView(9 * BlockSize, BlockSize);
+            ArrayView<byte> key = data.Keys.SubView(9 * BlockSize, BlockSize);
             ExclusiveOR(block, key);
 
             for (int i = 8; i >= 0; i--)
             {
-                key = keys.SubView(i * BlockSize, BlockSize);
+                key = data.Keys.SubView(i * BlockSize, BlockSize);
 
-                MultiTransformDecrypt(block, linearTransformation);
-                ReplaceBytes(block, reversReplaceBytes);
+                MultiTransformDecrypt(block, data);
+                ReplaceBytes(block, data);
                 ExclusiveOR(block, key);
             }
         }
@@ -131,12 +127,12 @@ namespace Kuznyechik
         /// Замена байт блока на байты из указанной таблицы.
         /// </summary>
         /// <param name="block">Блок данных.</param>
-        /// <param name="replaceBytes">Таблица замены.</param>
-        private static void ReplaceBytes(ArrayView<byte> block, ArrayView<byte> replaceBytes)
+        /// <param name="data">Данные.</param>
+        private static void ReplaceBytes(ArrayView<byte> block, KernelData data)
         {
             for (int i = 0; i < BlockSize; i++)
             {
-                block[i] = replaceBytes[(int)block[i]];
+                block[i] = data.ReplaceBytes[block[i]];
             }
         }
 
@@ -198,15 +194,15 @@ namespace Kuznyechik
         /// Трансформация блока.
         /// </summary>
         /// <param name="block">Блок.</param>
-        /// <param name="linearTransformation">Байты линейной трансформации.</param>
-        private static void TransformBlock(ArrayView<byte> block, ArrayView<byte> linearTransformation)
+        /// <param name="data">Данные.</param>
+        private static void TransformBlock(ArrayView<byte> block, KernelData data)
         {
-            byte sum = GaloisMultiplication(block[0], linearTransformation[0]);
+            byte sum = GaloisMultiplication(block[0], data.LinearTransformation[0]);
 
             for (int i = 1; i < BlockSize; i++)
             {
                 block[i - 1] = block[i];
-                sum ^= GaloisMultiplication(block[i], linearTransformation[i]);
+                sum ^= GaloisMultiplication(block[i], data.LinearTransformation[i]);
             }
 
             block[15] = sum;
@@ -216,15 +212,15 @@ namespace Kuznyechik
         /// Обратная трансформация блока.
         /// </summary>
         /// <param name="block">Блок.</param>
-        /// <param name="linearTransformation">Байты линейной трансформации.</param>
-        private static void ReverseTransformBlock(ArrayView<byte> block, ArrayView<byte> linearTransformation)
+        /// <param name="data">Данные.</param>
+        private static void ReverseTransformBlock(ArrayView<byte> block, KernelData data)
         {
             byte sum = block[15];
 
             for (int i = BlockSize - 1; i > 0; i--)
             {
                 block[i] = block[i - 1];
-                sum ^= GaloisMultiplication(block[i], linearTransformation[i]);
+                sum ^= GaloisMultiplication(block[i], data.LinearTransformation[i]);
             }
 
             block[0] = sum;
@@ -248,12 +244,12 @@ namespace Kuznyechik
         /// Шифрование блока.
         /// </summary>
         /// <param name="block">Блок.</param>
-        /// <param name="linearTransformation">Байты линейной трансформации.</param>
-        private static void MultiTransformEncrypt(ArrayView<byte> block, ArrayView<byte> linearTransformation)
+        /// <param name="data">Данные.</param>
+        private static void MultiTransformEncrypt(ArrayView<byte> block, KernelData data)
         {
             for (int i = 0; i < BlockSize; i++)
             {
-                TransformBlock(block, linearTransformation);
+                TransformBlock(block, data);
             }
         }
 
@@ -261,12 +257,12 @@ namespace Kuznyechik
         /// Расшифрование блока.
         /// </summary>
         /// <param name="block">Блок.</param>
-        /// <param name="linearTransformation">Байты линейной трансформации.</param>
-        private static void MultiTransformDecrypt(ArrayView<byte> block, ArrayView<byte> linearTransformation)
+        /// <param name="data">Данные.</param>
+        private static void MultiTransformDecrypt(ArrayView<byte> block, KernelData data)
         {
             for (int i = 0; i < BlockSize; i++)
             {
-                ReverseTransformBlock(block, linearTransformation);
+                ReverseTransformBlock(block, data);
             }
         }
 

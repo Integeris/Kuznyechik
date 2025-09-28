@@ -11,38 +11,26 @@ namespace Kuznyechik
         /// Шифрование данных.
         /// </summary>
         /// <param name="index">Индекс.</param>
-        /// <param name="arr">Массив байт для шифрования.</param>
-        /// <param name="keys">Ключи.</param>
-        /// <param name="linearTransformation">Байты линейной трансформации.</param>
-        /// <param name="replaceBytes">Таблица для линейного преобразования.</param>
-        internal static void Encrypt(Index1D index, 
-            ArrayView<byte> arr, 
-            ArrayView<byte> keys, 
-            ArrayView<byte> linearTransformation, 
-            ArrayView<byte> replaceBytes)
+        /// <param name="data">Данные.</param>
+        internal static void Encrypt(Index1D index,
+            KernelData data)
         {
-            // TODO: Создать структуру для передачипараметров пачкой.
+            // TODO: Создать структуру для передачи параметров пачкой.
 
-            ArrayView<byte> block = GetCurrentBlock(index, arr);
-            CryptoUtils.EncryptBlock(block, keys, linearTransformation, replaceBytes);
+            ArrayView<byte> block = GetCurrentBlock(index, data.Data);
+            CryptoUtils.EncryptBlock(block, data);
         }
 
         /// <summary>
         /// Расшифрование данных.
         /// </summary>
         /// <param name="index">Индекс.</param>
-        /// <param name="arr">Массив байт для расшифровки.</param>
-        /// <param name="keys">Ключи.</param>
-        /// <param name="linearTransformation">Байты линейной трансформации.</param>
-        /// <param name="replaceBytes">Таблица для линейного преобразования.</param>
-        internal static void Decrypt(Index1D index, 
-            ArrayView<byte> arr, 
-            ArrayView<byte> keys, 
-            ArrayView<byte> linearTransformation, 
-            ArrayView<byte> replaceBytes)
+        /// <param name="data">Данные.</param>
+        internal static void Decrypt(Index1D index,
+            KernelData data)
         {
-            ArrayView<byte> block = GetCurrentBlock(index, arr);
-            CryptoUtils.DecryptBlock(block, keys, linearTransformation, replaceBytes);
+            ArrayView<byte> block = GetCurrentBlock(index, data.Data);
+            CryptoUtils.DecryptBlock(block, data);
         }
 
         /// <summary>
