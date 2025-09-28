@@ -395,14 +395,13 @@ namespace Kuznyechik
             CancellationToken cancellationToken = default)
         {
             // TODO: Переписать метод так,чтобы маленький буффер брался из потока и запсывался в память видеокарты.
-            long usefulDataLength = dataStream.Length - dataStream.Length % CryptoUtils.BlockSize;
+            // TODO: Разделить этот метод на два: для шифрования и для расшифровывания.
+            // TODO: Для метода шифрования убрать вызов этого метода для добавления остатка.
 
-            if (usefulDataLength == 0)
-            {
-                return;
-            }
+            long byteLength = dataStream.Length - dataStream.Position + (CryptoUtils.BlockSize - dataStream.Length % CryptoUtils.BlockSize);
+            long byteLengthLoss = byteLength;
 
-            dataStream.Position = 0;
+            // dataStream.Position = 0;
             progress ??= new Progress<CryptoStatus>();
 
             using (MemoryBuffer1D<byte, Stride1D.Dense> keysBuffer =
@@ -422,31 +421,73 @@ namespace Kuznyechik
                 Action<Index1D, KernelData> kernel = 
                     this.accelerator.LoadAutoGroupedStreamKernel(action);
 
-                for (long i = usefulDataLength; i > 0;)
+                MemoryBuffer1D<byte, Stride1D.Dense> dataBuffer;
+
+                for (; byteLengthLoss > 0; byteLengthLoss -= dataBuffer.Length)
                 {
-                    using (MemoryBuffer1D<byte, Stride1D.Dense> dataBuffer = this.GetMaxBuffer(i))
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    dataBuffer = this.GetMaxBuffer(byteLengthLoss);
+                    Index1D index = new Index1D((int)(dataBuffer.Length / CryptoUtils.BlockSize));
+
+                    for (int i = 0; i < dataBuffer.Length; i += 512)
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
+                        // TODO: Оптимизировать эту часть код, возможно выделить отдельный метод под этот цикл.
+                        ArrayView<byte> dataPart = dataBuffer.View.SubView(i * 512, Math.Min(512, dataBuffer.Length - i * 512));
+                        byte[] buffer = new byte[dataPart.Length];
 
-                        Index1D index = new Index1D((int)(dataBuffer.Length / CryptoUtils.BlockSize));
-                        byte[] buffer = new byte[dataBuffer.Length];
+                        int readByteCount = dataStream.Read(buffer, 0, buffer.Length);
 
-                        dataStream.Read(buffer, 0, buffer.Length);
-                        dataBuffer.CopyFromCPU(buffer);
+                        if (readByteCount != buffer.Length)
+                        {
+                            buffer[^1] = (byte)(buffer.Length - readByteCount);
+                        }
 
-                        kernelData.Data = dataBuffer.View;
-                        kernel(index, kernelData);
-                        this.accelerator.Synchronize();
-
-                        dataBuffer.CopyToCPU(buffer);
-                        writeStream.Write(buffer, 0, buffer.Length);
-
-                        i -= buffer.Length;
-
-                        CryptoStatus status = new CryptoStatus(dataStream.Position, usefulDataLength, buffer.LongLength);
-                        progress.Report(status);
+                        dataPart.CopyFromCPU(buffer);
                     }
+
+                    kernelData.Data = dataBuffer.View;
+                    kernel(index, kernelData);
+                    this.accelerator.Synchronize();
+
+                    for (int i = 0; i < dataBuffer.Length; i += 512)
+                    {
+                        ArrayView<byte> dataPart = dataBuffer.View.SubView(i * 512, Math.Min(512, dataBuffer.Length - i * 512));
+                        byte[] buffer = new byte[dataPart.Length];
+
+                        dataPart.CopyToCPU(buffer);
+                        writeStream.Write(buffer, 0, buffer.Length);
+                    }
+
+                    CryptoStatus status = new CryptoStatus(byteLength - byteLengthLoss, byteLength, dataBuffer.Length);
+                    progress.Report(status);
                 }
+
+                //for (long i = usefulDataLength; i > 0;)
+                //{
+                //    using (MemoryBuffer1D<byte, Stride1D.Dense> dataBuffer = this.GetMaxBuffer(i))
+                //    {
+                //        cancellationToken.ThrowIfCancellationRequested();
+
+                //        Index1D index = new Index1D((int)(dataBuffer.Length / CryptoUtils.BlockSize));
+                //        byte[] buffer = new byte[dataBuffer.Length];
+
+                //        dataStream.Read(buffer, 0, buffer.Length);
+                //        dataBuffer.CopyFromCPU(buffer);
+
+                //        kernelData.Data = dataBuffer.View;
+                //        kernel(index, kernelData);
+                //        this.accelerator.Synchronize();
+
+                //        dataBuffer.CopyToCPU(buffer);
+                //        writeStream.Write(buffer, 0, buffer.Length);
+
+                //        i -= buffer.Length;
+
+                //        CryptoStatus status = new CryptoStatus(dataStream.Position, usefulDataLength, buffer.LongLength);
+                //        progress.Report(status);
+                //    }
+                //}
             }
         }
 
