@@ -5,7 +5,6 @@ using ILGPU.Runtime.Cuda;
 using ILGPU.Runtime.OpenCL;
 using System;
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -109,6 +108,7 @@ namespace Kuznyechik
             {
                 dataStream.Write(arr, 0, arr.Length);
                 dataStream.Position = 0;
+
                 this.Encrypt(dataStream, encryptedStream);
                 arr = encryptedStream.ToArray();
             }
@@ -123,7 +123,6 @@ namespace Kuznyechik
         public void Encrypt(Stream dataStream, Stream encryptedStream)
         {
             this.EncryptProcess(dataStream, encryptedStream);
-            this.AddBlockPadding(dataStream, encryptedStream);
         }
 
         /// <summary>
@@ -144,6 +143,7 @@ namespace Kuznyechik
             {
                 dataStream.Write(arr, 0, arr.Length);
                 dataStream.Position = 0;
+
                 await this.EncryptAsync(dataStream, encryptedStream, progress, cancellationToken);
                 return encryptedStream.ToArray();
             }
@@ -163,16 +163,11 @@ namespace Kuznyechik
             IProgress<CryptoStatus> progress = default,
             CancellationToken cancellationToken = default)
         {
-            await Task.Run(() =>
-            {
-                this.EncryptProcess(
-                    dataStream,
-                    encryptedStream,
-                    progress,
-                    cancellationToken);
-
-                this.AddBlockPadding(dataStream, encryptedStream);
-            });
+            await Task.Run(() => this.EncryptProcess(
+                dataStream,
+                encryptedStream,
+                progress,
+                cancellationToken));
         }
 
         /// <summary>
@@ -187,6 +182,7 @@ namespace Kuznyechik
             {
                 dataStream.Write(arr, 0, arr.Length);
                 dataStream.Position = 0;
+
                 this.Decrypt(dataStream, decryptedStream);
                 arr = decryptedStream.ToArray();
             }
@@ -201,8 +197,7 @@ namespace Kuznyechik
         public void Decrypt(Stream dataStream, Stream decryptedStream)
         {
             this.CheckDecryptStream(dataStream, decryptedStream);
-            this.EncryptProcess(dataStream, decryptedStream, Kernel.Decrypt, this.parameters.ReverseReplaceBytes);
-            this.RemoveDecryptPadding(decryptedStream);
+            this.DecryptProcess(dataStream, decryptedStream);
         }
 
         /// <summary>
@@ -222,6 +217,7 @@ namespace Kuznyechik
             {
                 dataStream.Write(arr, 0, arr.Length);
                 dataStream.Position = 0;
+
                 await this.DecryptAsync(dataStream, decryptedStream, progress, cancellationToken);
                 return decryptedStream.ToArray();
             }
@@ -246,15 +242,11 @@ namespace Kuznyechik
             {
                 this.CheckDecryptStream(dataStream, decryptedStream);
 
-                this.EncryptProcess(
+                this.DecryptProcess(
                     dataStream,
                     decryptedStream,
-                    Kernel.Decrypt,
-                    this.parameters.ReverseReplaceBytes,
                     progress,
                     cancellationToken);
-
-                this.RemoveDecryptPadding(decryptedStream);
             });
         }
 
@@ -329,69 +321,29 @@ namespace Kuznyechik
                 throw new ArgumentException("Некорректный размер потока данных: размер должен быть кратен размеру блока.",
                     nameof(dataStream));
             }
-            else if (!writeStream.CanRead)
+            else if (!writeStream.CanWrite)
             {
-                throw new ArgumentException("Поток записи должен быть доступен для чтения.", nameof(writeStream));
+                throw new ArgumentException("Поток записи должен быть доступен для записи.", nameof(writeStream));
             }
 
             this.CheckStreams(dataStream, writeStream);
         }
 
         /// <summary>
-        /// Добавление недостающих данных для полноты блока.
+        /// Выполнение шифрования на устройстве.
         /// </summary>
-        /// <param name="dataStream">Поток данных.</param>
-        /// <param name="encryptedStream">Выходной поток с зашифрованными данными.</param>
-        /// <returns>Количество добавленных байт.</returns>
-        private void AddBlockPadding(Stream dataStream, Stream encryptedStream)
-        {
-            byte tailLength = (byte)(dataStream.Length % CryptoUtils.BlockSize);
-            byte[] padding = new byte[CryptoUtils.BlockSize];
-
-            dataStream.Read(padding, 0, tailLength);
-            padding[^1] = (byte)(CryptoUtils.BlockSize - tailLength);
-
-            using (MemoryStream paddingStream = new MemoryStream(padding))
-            {
-                this.EncryptProcess(paddingStream, encryptedStream, Kernel.Encrypt, this.parameters.ReplaceBytes);
-            }
-        }
-
-        /// <summary>
-        /// Удаление заполнения шифрования.
-        /// </summary>
-        /// <param name="decryptedStream">Выходной поток с расшифрованными данными.</param>
-        /// <exception cref="ArgumentException"></exception>
-        private void RemoveDecryptPadding(Stream decryptedStream)
-        {
-            decryptedStream.Position -= 1;
-            int paddingLength = decryptedStream.ReadByte();
-
-            if (paddingLength > CryptoUtils.BlockSize)
-            {
-                throw new ArgumentException("Некорректный размер дополнения. Данные могут быть повреждены.");
-            }
-
-            decryptedStream.SetLength(decryptedStream.Length - paddingLength);
-        }
-
-        /// <summary>
-        /// Выполнение операции на устройстве.
-        /// </summary>
-        /// <param name="dataStream">Поток данных.</param>
+        /// <param name="readStream">Поток данных.</param>
         /// <param name="writeStream">Поток преобразованных данных.</param>
         /// <param name="progress">Прогресс операции.</param>
         /// <param name="cancellationToken">Токен отмены операции.</param>
         private void EncryptProcess(
-            Stream dataStream, 
+            Stream readStream, 
             Stream writeStream,
             IProgress<CryptoStatus> progress = default,
             CancellationToken cancellationToken = default)
         {
-            // TODO: Разделить этот метод на два: для шифрования и для расшифровывания.
-            // TODO: Для метода шифрования убрать вызов этого метода для добавления остатка.
-
-            long byteLength = dataStream.Length - dataStream.Position + (CryptoUtils.BlockSize - dataStream.Length % CryptoUtils.BlockSize);
+            long readableBytes = readStream.Length - readStream.Position;
+            long byteLength = readableBytes + (CryptoUtils.BlockSize - readableBytes % CryptoUtils.BlockSize);
             long byteLengthLoss = byteLength;
 
             progress ??= new Progress<CryptoStatus>();
@@ -419,7 +371,7 @@ namespace Kuznyechik
                     for (; byteLengthLoss > dataBuffer.Length; byteLengthLoss -= dataBuffer.Length)
                     {
                         this.ProcessBuffer(dataBuffer,
-                        dataStream,
+                        readStream,
                         writeStream,
                         kernel,
                         kernelData,
@@ -434,16 +386,88 @@ namespace Kuznyechik
                     this.accelerator.Allocate1D<byte>(byteLengthLoss))
                 {
                     kernelData.Data = dataBuffer.View;
-                    dataBuffer.View[dataBuffer.Length - 1] = (byte)(byteLength - dataStream.Length);
+
+                    byte[] paddingCount = new byte[] { (byte)(byteLength - readStream.Length) };
+                    dataBuffer.View.SubView(dataBuffer.Length - 1, 1).CopyFromCPU(paddingCount);
 
                     this.ProcessBuffer(dataBuffer, 
-                        dataStream, 
+                        readStream, 
                         writeStream, 
                         kernel, 
                         kernelData, 
                         byteLength, 
                         byteLengthLoss, 
                         progress, 
+                        cancellationToken);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Выполнение расшифровывания на устройстве.
+        /// </summary>
+        /// <param name="readStream">Поток данных.</param>
+        /// <param name="writeStream">Поток преобразованных данных.</param>
+        /// <param name="progress">Прогресс операции.</param>
+        /// <param name="cancellationToken">Токен отмены операции.</param>
+        private void DecryptProcess(
+            Stream readStream,
+            Stream writeStream,
+            IProgress<CryptoStatus> progress = default,
+            CancellationToken cancellationToken = default)
+        {
+            long byteLength = readStream.Length - readStream.Position;
+            long byteLengthLoss = byteLength;
+
+            progress ??= new Progress<CryptoStatus>();
+
+            using (MemoryBuffer1D<byte, Stride1D.Dense> keysBuffer =
+                this.accelerator.Allocate1D(this.parameters.FlatKeys))
+            using (MemoryBuffer1D<byte, Stride1D.Dense> linearTransformationBuffer =
+                this.accelerator.Allocate1D(this.parameters.LinearTransformation))
+            using (MemoryBuffer1D<byte, Stride1D.Dense> replaceBytesBuffer =
+                this.accelerator.Allocate1D(this.parameters.ReverseReplaceBytes))
+            {
+                KernelData kernelData = new KernelData()
+                {
+                    Keys = keysBuffer.View,
+                    LinearTransformation = linearTransformationBuffer.View,
+                    ReplaceBytes = replaceBytesBuffer.View
+                };
+
+                Action<Index1D, KernelData> kernel =
+                    this.accelerator.LoadAutoGroupedStreamKernel((Action<Index1D, KernelData>)Kernel.Decrypt);
+
+                using (MemoryBuffer1D<byte, Stride1D.Dense> dataBuffer =
+                    this.GetMaxBuffer(byteLengthLoss))
+                {
+                    for (; byteLengthLoss > dataBuffer.Length; byteLengthLoss -= dataBuffer.Length)
+                    {
+                        this.ProcessBuffer(dataBuffer,
+                        readStream,
+                        writeStream,
+                        kernel,
+                        kernelData,
+                        byteLength,
+                        byteLengthLoss,
+                        progress,
+                        cancellationToken);
+                    }
+                }
+
+                using (MemoryBuffer1D<byte, Stride1D.Dense> dataBuffer =
+                    this.accelerator.Allocate1D<byte>(byteLengthLoss))
+                {
+                    kernelData.Data = dataBuffer.View;
+
+                    this.ProcessBufferWithPadding(dataBuffer,
+                        readStream,
+                        writeStream,
+                        kernel,
+                        kernelData,
+                        byteLength,
+                        byteLengthLoss,
+                        progress,
                         cancellationToken);
                 }
             }
@@ -487,6 +511,52 @@ namespace Kuznyechik
         }
 
         /// <summary>
+        /// Обработка буфера устройством с дополнением.
+        /// </summary>
+        /// <param name="dataBuffer">Буфер устройства.</param>
+        /// <param name="readStream">Поток чтения данных.</param>
+        /// <param name="writeStream">Поток записи.</param>
+        /// <param name="kernel">Метод ядра.</param>
+        /// <param name="kernelData">Данные ядра.</param>
+        /// <param name="byteLength">Длинна данных.</param>
+        /// <param name="byteLengthLoss">Остаток данных.</param>
+        /// <param name="progress">Прогресс.</param>
+        /// <param name="cancellationToken">Токен отмены.</param>
+        private void ProcessBufferWithPadding(MemoryBuffer1D<byte, Stride1D.Dense> dataBuffer,
+            Stream readStream,
+            Stream writeStream,
+            Action<Index1D, KernelData> kernel,
+            KernelData kernelData,
+            long byteLength,
+            long byteLengthLoss,
+            IProgress<CryptoStatus> progress,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            Index1D index = new Index1D((int)(dataBuffer.Length / CryptoUtils.BlockSize));
+
+            this.CopyFromCPU(readStream, dataBuffer, Int16.MaxValue);
+
+            kernel(index, kernelData);
+            this.accelerator.Synchronize();
+
+            byte[] paddingCount = new byte[1];
+            dataBuffer.View.SubView(dataBuffer.Length - 1, 1).CopyToCPU(paddingCount);
+            int padding = paddingCount[0];
+
+            if (padding > CryptoUtils.BlockSize)
+            {
+                throw new ArgumentException("Некорректный размер дополнения. Данные могут быть повреждены.");
+            }
+
+            this.CopyToCPU(writeStream, dataBuffer, Int16.MaxValue, padding);
+
+            CryptoStatus status = new CryptoStatus(byteLength - byteLengthLoss, byteLength, dataBuffer.Length);
+            progress.Report(status);
+        }
+
+        /// <summary>
         /// Копирование данных на устройство.
         /// </summary>
         /// <param name="readStream">Поток чтения данных.</param>
@@ -496,12 +566,15 @@ namespace Kuznyechik
         {
             byte[] buffer = new byte[bufferLength];
 
-            for (long offset = 0; offset < gpuData.Length; offset += bufferLength)
+            for (long offset = 0; offset < gpuData.Length;)
             {
                 ArrayView<byte> dataPart = gpuData.View.SubView(offset, Math.Min(bufferLength, gpuData.Length - offset));
 
                 int readBytes = readStream.Read(buffer, 0, dataPart.IntLength);
-                dataPart.CopyFromCPU(ref buffer[0], readBytes);
+                ReadOnlySpan<byte> span = buffer.AsSpan(0, readBytes);
+
+                dataPart.CopyFromCPU(span);
+                offset += dataPart.Length;
             }
         }
 
@@ -511,16 +584,21 @@ namespace Kuznyechik
         /// <param name="writeStream">Поток записи.</param>
         /// <param name="gpuData">Выделенная память на устройстве.</param>
         /// <param name="bufferLength">Размер буфера.</param>
-        private void CopyToCPU(Stream writeStream, MemoryBuffer1D<byte, Stride1D.Dense> gpuData, int bufferLength)
+        /// <param name="paddingLength">Размер дополнения.</param>
+        private void CopyToCPU(Stream writeStream, MemoryBuffer1D<byte, Stride1D.Dense> gpuData, int bufferLength, int paddingLength = 0)
         {
             byte[] buffer = new byte[bufferLength];
+            long gpuLength = gpuData.Length - paddingLength;
 
-            for (long offset = 0; offset < gpuData.Length; offset += bufferLength)
+            for (long offset = 0; offset < gpuLength;)
             {
-                ArrayView<byte> dataPart = gpuData.View.SubView(offset, Math.Min(bufferLength, gpuData.Length - offset));
+                ArrayView<byte> dataPart = gpuData.View.SubView(offset, Math.Min(bufferLength, gpuLength - offset));
+                Span<byte> span = buffer.AsSpan(0, dataPart.IntLength);
 
-                dataPart.CopyToCPU(ref buffer[0], dataPart.Length);
-                writeStream.Write(buffer, 0, dataPart.IntLength);
+                dataPart.CopyToCPU(span);
+                writeStream.Write(span);
+
+                offset += dataPart.Length;
             }
         }
 
