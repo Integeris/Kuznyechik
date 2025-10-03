@@ -103,26 +103,26 @@ namespace Kuznyechik
         /// <exception cref="ArgumentException"></exception>
         public void Encrypt(ref byte[] arr)
         {
-            using (MemoryStream dataStream = new MemoryStream())
-            using (MemoryStream encryptedStream = new MemoryStream())
+            using (MemoryStream readStream = new MemoryStream())
+            using (MemoryStream writeStream = new MemoryStream())
             {
-                dataStream.Write(arr, 0, arr.Length);
-                dataStream.Position = 0;
+                readStream.Write(arr, 0, arr.Length);
+                readStream.Position = 0;
 
-                this.Encrypt(dataStream, encryptedStream);
-                arr = encryptedStream.ToArray();
+                this.Encrypt(readStream, writeStream);
+                arr = writeStream.ToArray();
             }
         }
 
         /// <summary>
         /// Шифрование данных из потока в поток.
         /// </summary>
-        /// <param name="dataStream">Поток данных.</param>
-        /// <param name="encryptedStream">Выходной поток с зашифрованными данными.</param>
+        /// <param name="readStream">Поток данных.</param>
+        /// <param name="writeStream">Выходной поток с зашифрованными данными.</param>
         /// <exception cref="ArgumentException"></exception>
-        public void Encrypt(Stream dataStream, Stream encryptedStream)
+        public void Encrypt(Stream readStream, Stream writeStream)
         {
-            this.EncryptProcess(dataStream, encryptedStream);
+            this.EncryptProcess(readStream, writeStream);
         }
 
         /// <summary>
@@ -138,34 +138,34 @@ namespace Kuznyechik
             IProgress<CryptoStatus> progress = default, 
             CancellationToken cancellationToken = default)
         {
-            using (MemoryStream dataStream = new MemoryStream())
-            using (MemoryStream encryptedStream = new MemoryStream())
+            using (MemoryStream readStream = new MemoryStream())
+            using (MemoryStream writeStream = new MemoryStream())
             {
-                dataStream.Write(arr, 0, arr.Length);
-                dataStream.Position = 0;
+                readStream.Write(arr, 0, arr.Length);
+                readStream.Position = 0;
 
-                await this.EncryptAsync(dataStream, encryptedStream, progress, cancellationToken);
-                return encryptedStream.ToArray();
+                await this.EncryptAsync(readStream, writeStream, progress, cancellationToken);
+                return writeStream.ToArray();
             }
         }
 
         /// <summary>
         /// Шифрование данных из потока в поток.
         /// </summary>
-        /// <param name="dataStream">Поток данных.</param>
-        /// <param name="encryptedStream">Выходной поток с зашифрованными данными.</param>
+        /// <param name="readStream">Поток для чтения данных.</param>
+        /// <param name="writeStream">Выходной поток с зашифрованными данными.</param>
         /// <param name="progress">Прогресс шифрования.</param>
         /// <param name="cancellationToken">Токен отмены операции.</param>
         /// <returns>Задача шифрования.</returns>
         public async Task EncryptAsync(
-            Stream dataStream, 
-            Stream encryptedStream,
+            Stream readStream, 
+            Stream writeStream,
             IProgress<CryptoStatus> progress = default,
             CancellationToken cancellationToken = default)
         {
             await Task.Run(() => this.EncryptProcess(
-                dataStream,
-                encryptedStream,
+                readStream,
+                writeStream,
                 progress,
                 cancellationToken));
         }
@@ -177,27 +177,27 @@ namespace Kuznyechik
         /// <exception cref="ArgumentException"></exception>
         public void Decrypt(ref byte[] arr)
         {
-            using (MemoryStream dataStream = new MemoryStream())
-            using (MemoryStream decryptedStream = new MemoryStream())
+            using (MemoryStream readStream = new MemoryStream())
+            using (MemoryStream writeStream = new MemoryStream())
             {
-                dataStream.Write(arr, 0, arr.Length);
-                dataStream.Position = 0;
+                readStream.Write(arr, 0, arr.Length);
+                readStream.Position = 0;
 
-                this.Decrypt(dataStream, decryptedStream);
-                arr = decryptedStream.ToArray();
+                this.Decrypt(readStream, writeStream);
+                arr = writeStream.ToArray();
             }
         }
-        
+
         /// <summary>
         /// Расшифрование данных из потока в поток.
         /// </summary>
-        /// <param name="dataStream">Поток данных.</param>
-        /// <param name="decryptedStream">Выходной поток с расшифрованными данными.</param>
+        /// <param name="readStream">Поток для чтения данных.</param>
+        /// <param name="writeStream">Выходной поток с расшифрованными данными.</param>
         /// <exception cref="ArgumentException"></exception>
-        public void Decrypt(Stream dataStream, Stream decryptedStream)
+        public void Decrypt(Stream readStream, Stream writeStream)
         {
-            this.CheckDecryptStream(dataStream, decryptedStream);
-            this.DecryptProcess(dataStream, decryptedStream);
+            this.CheckDecryptStream(readStream, writeStream);
+            this.DecryptProcess(readStream, writeStream);
         }
 
         /// <summary>
@@ -212,39 +212,39 @@ namespace Kuznyechik
             IProgress<CryptoStatus> progress = default, 
             CancellationToken cancellationToken = default)
         {
-            using (MemoryStream dataStream = new MemoryStream())
-            using (MemoryStream decryptedStream = new MemoryStream())
+            using (MemoryStream readStream = new MemoryStream())
+            using (MemoryStream writeStream = new MemoryStream())
             {
-                dataStream.Write(arr, 0, arr.Length);
-                dataStream.Position = 0;
+                readStream.Write(arr, 0, arr.Length);
+                readStream.Position = 0;
 
-                await this.DecryptAsync(dataStream, decryptedStream, progress, cancellationToken);
-                return decryptedStream.ToArray();
+                await this.DecryptAsync(readStream, writeStream, progress, cancellationToken);
+                return writeStream.ToArray();
             }
         }
 
         /// <summary>
         /// Расшифрование данных из потока в поток.
         /// </summary>
-        /// <param name="dataStream">Поток данных.</param>
-        /// <param name="decryptedStream">Выходной поток с расшифрованными данными.</param>
+        /// <param name="readStream">Поток для чтения данных.</param>
+        /// <param name="writeStream">Выходной поток с расшифрованными данными.</param>
         /// <param name="progress">Прогресс расшифровки.</param>
         /// <param name="cancellationToken">Токен отмены операции.</param>
         /// <returns>Задача расшифровки.</returns>
         /// <exception cref="ArgumentException"></exception>
         public async Task DecryptAsync(
-            Stream dataStream, 
-            Stream decryptedStream,
+            Stream readStream, 
+            Stream writeStream,
             IProgress<CryptoStatus> progress = default,
             CancellationToken cancellationToken = default)
         {
             await Task.Run(() =>
             {
-                this.CheckDecryptStream(dataStream, decryptedStream);
+                this.CheckDecryptStream(readStream, writeStream);
 
                 this.DecryptProcess(
-                    dataStream,
-                    decryptedStream,
+                    readStream,
+                    writeStream,
                     progress,
                     cancellationToken);
             });
@@ -280,14 +280,14 @@ namespace Kuznyechik
         /// <summary>
         /// Проверка потоков.
         /// </summary>
-        /// <param name="dataStream">Поток чтения данных.</param>
+        /// <param name="readStream">Поток для чтения данных.</param>
         /// <param name="writeStream">Поток для записи.</param>
         /// <exception cref="ArgumentException"></exception>
-        private void CheckStreams(Stream dataStream, Stream writeStream)
+        private void CheckStreams(Stream readStream, Stream writeStream)
         {
-            if (dataStream == null)
+            if (readStream == null)
             {
-                throw new ArgumentException("Поток данных не может быть null.", nameof(dataStream));
+                throw new ArgumentException("Поток для чтения данных не может быть null.", nameof(readStream));
             }
             else if (writeStream == null)
             {
@@ -297,7 +297,7 @@ namespace Kuznyechik
             {
                 throw new ArgumentException("Поток для записи должен быть доступен для записи.", nameof(writeStream));
             }
-            else if (dataStream == writeStream)
+            else if (readStream == writeStream)
             {
                 throw new ArgumentException("Нельзя выполнить чтение и запись в один и тот же поток.", nameof(writeStream));
             }
@@ -306,27 +306,23 @@ namespace Kuznyechik
         /// <summary>
         /// Проверка потоков.
         /// </summary>
-        /// <param name="dataStream">Поток чтения данных.</param>
+        /// <param name="readStream">Поток для чтения данных.</param>
         /// <param name="writeStream">Поток для записи.</param>
         /// <exception cref="ArgumentException"></exception>
-        private void CheckDecryptStream(Stream dataStream, Stream writeStream)
+        private void CheckDecryptStream(Stream readStream, Stream writeStream)
         {
-            if (dataStream.Length == 0)
+            if (readStream.Length == 0)
             {
-                throw new ArgumentException("Некорректный размер потока данных: размер не может быть равен нулю.",
-                    nameof(dataStream));
+                throw new ArgumentException("Некорректный размер потока для чтения данных: размер не может быть равен нулю.",
+                    nameof(readStream));
             }
-            else if (dataStream.Length % CryptoUtils.BlockSize != 0)
+            else if (readStream.Length % CryptoUtils.BlockSize != 0)
             {
-                throw new ArgumentException("Некорректный размер потока данных: размер должен быть кратен размеру блока.",
-                    nameof(dataStream));
-            }
-            else if (!writeStream.CanWrite)
-            {
-                throw new ArgumentException("Поток записи должен быть доступен для записи.", nameof(writeStream));
+                throw new ArgumentException("Некорректный размер потока для чтения данных: размер должен быть кратен размеру блока.",
+                    nameof(readStream));
             }
 
-            this.CheckStreams(dataStream, writeStream);
+            this.CheckStreams(readStream, writeStream);
         }
 
         /// <summary>

@@ -3,7 +3,7 @@
 namespace Kuznyechik
 {
     /// <summary>
-    /// Класс методов для видеокарты.
+    /// Класс методов ядра.
     /// </summary>
     internal static class Kernel
     {
@@ -15,8 +15,6 @@ namespace Kuznyechik
         internal static void Encrypt(Index1D index,
             KernelData data)
         {
-            // TODO: Создать структуру для передачи параметров пачкой.
-
             ArrayView<byte> block = GetCurrentBlock(index, data.Data);
             CryptoUtils.EncryptBlock(block, data);
         }
