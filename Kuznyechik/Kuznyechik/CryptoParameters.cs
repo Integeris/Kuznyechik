@@ -9,6 +9,11 @@ namespace Kuznyechik
     public struct CryptoParameters
     {
         /// <summary>
+        /// Таблица предвычесленных значений поля Галуа.
+        /// </summary>
+        private readonly byte[,] galoisMultiplicationTable;
+
+        /// <summary>
         /// Таблица для нелинейного преобразования.
         /// </summary>
         private readonly byte[] replaceBytes;
@@ -42,6 +47,14 @@ namespace Kuznyechik
         /// Ключ.
         /// </summary>
         private ImmutableArray<byte> key;
+
+        /// <summary>
+        /// Таблица предвычесленных значений поля Галуа.
+        /// </summary>
+        public readonly byte[,] GaloisMultiplicationTable
+        {
+            get => galoisMultiplicationTable;
+        }
 
         /// <summary>
         /// Таблица для нелинейного преобразования.
@@ -102,7 +115,8 @@ namespace Kuznyechik
         /// <summary>
         /// Создание параметров для работы алгоритма.
         /// </summary>
-        public CryptoParameters()
+        /// <param name="key">Ключ шифрования.</param>
+        public CryptoParameters(byte[] key = default)
         {
             replaceBytes = new byte[]
             {
@@ -417,16 +431,19 @@ namespace Kuznyechik
             }
 
             flatKeys = new byte[keys.Length * CryptoUtils.BlockSize];
-            SetNewKey(new byte[CryptoUtils.KeySize]);
-        }
+            key ??= new byte[CryptoUtils.KeySize];
 
-        /// <summary>
-        /// Создание параметров для работы алгоритма.
-        /// </summary>
-        /// <param name="key">Ключ шифрования.</param>
-        public CryptoParameters(byte[] key) : this()
-        {
-            SetNewKey(key);
+            this.galoisMultiplicationTable = new byte[256, 256];
+
+            for (int i = Byte.MinValue; i <= Byte.MaxValue; i++)
+            {
+                for (int j = Byte.MinValue; j <= Byte.MaxValue; j++)
+                {
+                    this.galoisMultiplicationTable[i, j] = GaloisMultiplication((byte)i, (byte)j);
+                }
+            }
+
+            this.SetNewKey(key);
         }
 
         /// <summary>
@@ -475,10 +492,10 @@ namespace Kuznyechik
                 throw new ArgumentException($"Массив констант должен быть длинной {CryptoUtils.BlockSize}.", nameof(constants));
             }
 
-            Buffer.BlockCopy(replaceBytes, 0, this.replaceBytes, 0, replaceBytes.Length);
-            Buffer.BlockCopy(reverseReplaceBytes, 0, this.reverseReplaceBytes, 0, reverseReplaceBytes.Length);
-            Buffer.BlockCopy(linearTransformation, 0, this.linearTransformation, 0, linearTransformation.Length);
-            Buffer.BlockCopy(constants, 0, this.constants, 0, constants.Length);
+            Array.Copy(replaceBytes, this.replaceBytes, replaceBytes.Length);
+            Array.Copy(reverseReplaceBytes, this.reverseReplaceBytes, reverseReplaceBytes.Length);
+            Array.Copy(linearTransformation, this.linearTransformation, linearTransformation.Length);
+            Array.Copy(constants, this.constants, constants.Length);
         }
 
         /// <summary>
@@ -491,11 +508,11 @@ namespace Kuznyechik
         {
             if (newKey == null)
             {
-                throw new ArgumentException("Ключ не может быть null.", nameof(Key));
+                throw new ArgumentException("Ключ не может быть null.", nameof(this.key));
             }
             else if (newKey.Length != CryptoUtils.KeySize)
             {
-                throw new ArgumentOutOfRangeException(nameof(Key), $"Длина ключа должна быть {CryptoUtils.KeySize} байт.");
+                throw new ArgumentOutOfRangeException(nameof(this.key), $"Длина ключа должна быть {CryptoUtils.KeySize} байт.");
             }
 
             key = ImmutableArray.Create(newKey);
@@ -503,12 +520,146 @@ namespace Kuznyechik
             key.CopyTo(0, keys[0], 0, CryptoUtils.BlockSize);
             key.CopyTo(CryptoUtils.BlockSize, keys[1], 0, CryptoUtils.BlockSize);
 
-            CryptoUtils.GenerationRoundKeys(keys, constants, linearTransformation, replaceBytes);
+            this.GenerationRoundKeys();
 
             for (int i = 0; i < keys.Length; i++)
             {
                 Buffer.BlockCopy(keys[i], 0, flatKeys, i * CryptoUtils.BlockSize, CryptoUtils.BlockSize);
             }
+        }
+
+        /// <summary>
+        /// Умножение чисел в поле Галуа.
+        /// </summary>
+        /// <param name="origin">Исходный байт.</param>
+        /// <param name="key">Байт ключа.</param>
+        /// <returns>Результат умножения по Галуа.</returns>
+        private static byte GaloisMultiplication(byte origin, byte key)
+        {
+            byte result = 0;
+
+            // цикл для каждого бита (в байте 8 битов)
+            for (int i = 0; i < 8; i++)
+            {
+                // Если младший бит ключа равен 1.
+                if ((key & 0b01) == 1)
+                {
+                    result ^= origin;
+                }
+
+                key >>= 1;
+
+                // Вычисляем старший бит исходного байта.
+                byte higherBit = (byte)(origin & 0b10000000);
+                origin <<= 1;
+
+                if (higherBit != 0)
+                {
+                    // Неприводимый полином для поля Галуа: x^8 + x^7 + x^6 + x + 1
+                    origin ^= 195;
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Генерация раундовых ключей.
+        /// </summary>
+        private readonly void GenerationRoundKeys()
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                int firstPart = i * 2 + 2;
+                int secondPart = i * 2 + 3;
+
+                Array.Copy(keys[firstPart - 2], keys[firstPart], CryptoUtils.BlockSize);
+                Array.Copy(keys[secondPart - 2], keys[secondPart], CryptoUtils.BlockSize);
+
+                int constantOffset = 8 * i;
+
+                for (int j = 0; j < 8; j++)
+                {
+                    this.FeistelCell(keys[firstPart], keys[secondPart], constants[constantOffset + j]);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Ячейка Фейстеля.
+        /// </summary>
+        /// <param name="firstKey">Первый ключ.</param>
+        /// <param name="secondKey">Второй ключ.</param>
+        /// <param name="constants">Константы.</param>
+        private readonly void FeistelCell(Span<byte> firstKey, Span<byte> secondKey, Span<byte> constants)
+        {
+            Span<byte> tmpKey = stackalloc byte[CryptoUtils.BlockSize];
+            firstKey.CopyTo(tmpKey);
+
+            ExclusiveOR(tmpKey, constants);
+            ReplaceBlock(tmpKey, replaceBytes);
+            this.MultiTransform(tmpKey, linearTransformation);
+            ExclusiveOR(tmpKey, secondKey);
+
+            firstKey.CopyTo(secondKey);
+            tmpKey.CopyTo(firstKey);
+        }
+
+        /// <summary>
+        /// Исключающее ИЛИ для блоков.
+        /// </summary>
+        /// <param name="source">Источник.</param>
+        /// <param name="key">Маска.</param>
+        private static void ExclusiveOR(Span<byte> source, ReadOnlySpan<byte> key)
+        {
+            for (int i = 0; i < CryptoUtils.BlockSize; i++)
+            {
+                source[i] ^= key[i];
+            }
+        }
+
+        /// <summary>
+        /// Замена байт блока на байты из указанной таблицы.
+        /// </summary>
+        /// <param name="block">Блок данных.</param>
+        /// <param name="replaceBytes">Таблица замены.</param>
+        private static void ReplaceBlock(Span<byte> block, ReadOnlySpan<byte> replaceBytes)
+        {
+            for (int i = 0; i < CryptoUtils.BlockSize; i++)
+            {
+                block[i] = replaceBytes[block[i]];
+            }
+        }
+
+        /// <summary>
+        /// Шифрование блока.
+        /// </summary>
+        /// <param name="block">Блок.</param>
+        /// <param name="linearTransformation">Байты линейной трансформации.</param>
+        private readonly void MultiTransform(Span<byte> block, ReadOnlySpan<byte> linearTransformation)
+        {
+            for (int i = 0; i < CryptoUtils.BlockSize; i++)
+            {
+                this.TransformBlock(block, linearTransformation);
+            }
+        }
+
+        /// <summary>
+        /// Трансформация блока.
+        /// </summary>
+        /// <param name="block">Блок.</param>
+        /// <param name="linearTransformation">Байты линейной трансформации.</param>
+        private readonly void TransformBlock(Span<byte> block, ReadOnlySpan<byte> linearTransformation)
+        {
+            byte sum = galoisMultiplicationTable[block[0], linearTransformation[0]];
+
+            for (int i = 1; i < CryptoUtils.BlockSize; i++)
+            {
+                block[i - 1] = block[i];
+                sum ^= galoisMultiplicationTable[block[i], linearTransformation[i]];
+            }
+
+            block[15] = sum;
         }
     }
 }

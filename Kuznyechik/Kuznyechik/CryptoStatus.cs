@@ -28,9 +28,9 @@
         /// <param name="bufferLength">Размер буфера.</param>
         public CryptoStatus(long dataPosition, long dataLength, long bufferLength)
         {
-            DataPosition = dataPosition;
-            DataLength = dataLength;
-            BufferLength = bufferLength;
+            this.DataPosition = dataPosition;
+            this.DataLength = dataLength;
+            this.BufferLength = bufferLength;
         }
     }
 }

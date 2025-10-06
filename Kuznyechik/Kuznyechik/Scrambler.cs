@@ -350,12 +350,15 @@ namespace Kuznyechik
                 this.accelerator.Allocate1D(this.parameters.LinearTransformation))
             using (MemoryBuffer1D<byte, Stride1D.Dense> replaceBytesBuffer =
                 this.accelerator.Allocate1D(this.parameters.ReplaceBytes))
+            using (MemoryBuffer2D<byte, Stride2D.DenseX> galoisMultiplicationTable =
+                this.accelerator.Allocate2DDenseX(this.parameters.GaloisMultiplicationTable))
             {
                 KernelData kernelData = new KernelData()
                 {
                     Keys = keysBuffer.View,
                     LinearTransformation = linearTransformationBuffer.View,
-                    ReplaceBytes = replaceBytesBuffer.View
+                    ReplaceBytes = replaceBytesBuffer.View,
+                    GaloisMultiplicationTable = galoisMultiplicationTable.View
                 };
 
                 Action<Index1D, KernelData> kernel = 
@@ -423,12 +426,15 @@ namespace Kuznyechik
                 this.accelerator.Allocate1D(this.parameters.LinearTransformation))
             using (MemoryBuffer1D<byte, Stride1D.Dense> replaceBytesBuffer =
                 this.accelerator.Allocate1D(this.parameters.ReverseReplaceBytes))
+            using (MemoryBuffer2D<byte, Stride2D.DenseX> galoisMultiplicationTable =
+                this.accelerator.Allocate2DDenseX(this.parameters.GaloisMultiplicationTable))
             {
                 KernelData kernelData = new KernelData()
                 {
                     Keys = keysBuffer.View,
                     LinearTransformation = linearTransformationBuffer.View,
-                    ReplaceBytes = replaceBytesBuffer.View
+                    ReplaceBytes = replaceBytesBuffer.View,
+                    GaloisMultiplicationTable = galoisMultiplicationTable.View
                 };
 
                 Action<Index1D, KernelData> kernel =
@@ -495,12 +501,12 @@ namespace Kuznyechik
 
             Index1D index = new Index1D((int)(dataBuffer.Length / CryptoUtils.BlockSize));
 
-            this.CopyFromCPU(readStream, dataBuffer, Int16.MaxValue);
+            this.CopyFromCPU(readStream, dataBuffer, 104857600);
 
             kernel(index, kernelData);
             this.accelerator.Synchronize();
 
-            this.CopyToCPU(writeStream, dataBuffer, Int16.MaxValue);
+            this.CopyToCPU(writeStream, dataBuffer, 104857600);
 
             CryptoStatus status = new CryptoStatus(byteLength - byteLengthLoss, byteLength, dataBuffer.Length);
             progress.Report(status);
@@ -532,7 +538,7 @@ namespace Kuznyechik
 
             Index1D index = new Index1D((int)(dataBuffer.Length / CryptoUtils.BlockSize));
 
-            this.CopyFromCPU(readStream, dataBuffer, Int16.MaxValue);
+            this.CopyFromCPU(readStream, dataBuffer, 104857600);
 
             kernel(index, kernelData);
             this.accelerator.Synchronize();
@@ -546,7 +552,7 @@ namespace Kuznyechik
                 throw new ArgumentException("Некорректный размер дополнения. Данные могут быть повреждены.");
             }
 
-            this.CopyToCPU(writeStream, dataBuffer, Int16.MaxValue, padding);
+            this.CopyToCPU(writeStream, dataBuffer, 104857600, padding);
 
             CryptoStatus status = new CryptoStatus(byteLength - byteLengthLoss, byteLength, dataBuffer.Length);
             progress.Report(status);
