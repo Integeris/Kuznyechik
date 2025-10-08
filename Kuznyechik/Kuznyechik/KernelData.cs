@@ -38,8 +38,8 @@ namespace Kuznyechik
         /// </summary>
         public ArrayView1D<byte, Stride1D.Dense> Data
         {
-            readonly get => data;
-            set => data = value;
+            readonly get => this.data;
+            set => this.data = value;
         }
 
         /// <summary>
@@ -47,8 +47,8 @@ namespace Kuznyechik
         /// </summary>
         public ArrayView1D<byte, Stride1D.Dense> Keys
         {
-            readonly get => keys;
-            set => keys = value;
+            readonly get => this.keys;
+            set => this.keys = value;
         }
 
         /// <summary>
@@ -56,8 +56,8 @@ namespace Kuznyechik
         /// </summary>
         public ArrayView1D<byte, Stride1D.Dense> LinearTransformation
         {
-            readonly get => linearTransformation;
-            set => linearTransformation = value;
+            readonly get => this.linearTransformation;
+            set => this.linearTransformation = value;
         }
 
         /// <summary>
@@ -65,8 +65,8 @@ namespace Kuznyechik
         /// </summary>
         public ArrayView1D<byte, Stride1D.Dense> ReplaceBytes
         {
-            readonly get => replaceBytes;
-            set => replaceBytes = value;
+            readonly get => this.replaceBytes;
+            set => this.replaceBytes = value;
         }
 
         /// <summary>
@@ -74,8 +74,8 @@ namespace Kuznyechik
         /// </summary>
         public ArrayView2D<byte, Stride2D.DenseX> GaloisMultiplicationTable
         {
-            readonly get => galoisMultiplicationTable;
-            set => galoisMultiplicationTable = value;
+            readonly get => this.galoisMultiplicationTable;
+            set => this.galoisMultiplicationTable = value;
         }
 
         /// <summary>

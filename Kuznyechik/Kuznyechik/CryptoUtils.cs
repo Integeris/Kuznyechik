@@ -11,12 +11,12 @@ namespace Kuznyechik
         /// <summary>
         /// Размер блока.
         /// </summary>
-        internal const int BlockSize = 16;
+        internal const byte BlockSize = 16;
 
         /// <summary>
         /// Размер ключа.
         /// </summary>
-        internal const int KeySize = 32;
+        internal const byte KeySize = 32;
 
         /// <summary>
         /// Шифрование блока.

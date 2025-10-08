@@ -53,7 +53,7 @@ namespace Kuznyechik
         /// </summary>
         public readonly byte[,] GaloisMultiplicationTable
         {
-            get => galoisMultiplicationTable;
+            get => this.galoisMultiplicationTable;
         }
 
         /// <summary>
@@ -61,7 +61,7 @@ namespace Kuznyechik
         /// </summary>
         public readonly byte[] ReplaceBytes
         {
-            get => replaceBytes;
+            get => this.replaceBytes;
         }
 
         /// <summary>
@@ -69,7 +69,7 @@ namespace Kuznyechik
         /// </summary>
         public readonly byte[] ReverseReplaceBytes
         {
-            get => reverseReplaceBytes;
+            get => this.reverseReplaceBytes;
         }
 
         /// <summary>
@@ -77,7 +77,7 @@ namespace Kuznyechik
         /// </summary>
         public readonly byte[] LinearTransformation
         {
-            get => linearTransformation;
+            get => this.linearTransformation;
         }
 
         /// <summary>
@@ -85,7 +85,7 @@ namespace Kuznyechik
         /// </summary>
         public readonly byte[][] Constants
         {
-            get => constants;
+            get => this.constants;
         }
 
         /// <summary>
@@ -93,7 +93,7 @@ namespace Kuznyechik
         /// </summary>
         public readonly byte[][] Keys
         {
-            get => keys;
+            get => this.keys;
         }
 
         /// <summary>
@@ -101,7 +101,7 @@ namespace Kuznyechik
         /// </summary>
         public readonly byte[] FlatKeys
         {
-            get => flatKeys;
+            get => this.flatKeys;
         }
 
         /// <summary>
@@ -109,7 +109,7 @@ namespace Kuznyechik
         /// </summary>
         public readonly ImmutableArray<byte> Key
         {
-            get => key;
+            get => this.key;
         }
 
         /// <summary>
@@ -118,7 +118,7 @@ namespace Kuznyechik
         /// <param name="key">Ключ шифрования.</param>
         public CryptoParameters(byte[] key = default)
         {
-            replaceBytes = new byte[]
+            this.replaceBytes = new byte[]
             {
                 0xFC, 0xEE, 0xDD, 0x11, 0xCF, 0x6E, 0x31, 0x16,
                 0xFB, 0xC4, 0xFA, 0xDA, 0x23, 0xC5, 0x04, 0x4D,
@@ -154,7 +154,7 @@ namespace Kuznyechik
                 0xD1, 0x66, 0xAF, 0xC2, 0x39, 0x4B, 0x63, 0xB6
             };
 
-            reverseReplaceBytes = new byte[]
+            this.reverseReplaceBytes = new byte[]
             {
                 0xA5, 0x2D, 0x32, 0x8F, 0x0E, 0x30, 0x38, 0xC0,
                 0x54, 0xE6, 0x9E, 0x39, 0x55, 0x7E, 0x52, 0x91,
@@ -190,13 +190,13 @@ namespace Kuznyechik
                 0xD6, 0x20, 0x0A, 0x08, 0x00, 0x4C, 0xD7, 0x74
             };
 
-            linearTransformation = new byte[]
+            this.linearTransformation = new byte[]
             {
                 1, 148, 32, 133, 16, 194, 192, 1,
                 251, 1, 192, 194, 16, 133, 32, 148
             };
 
-            constants = new byte[32][]
+            this.constants = new byte[32][]
             {
                 new byte[]
                 {
@@ -423,14 +423,14 @@ namespace Kuznyechik
                 }
             };
 
-            keys = new byte[10][];
+            this.keys = new byte[10][];
 
-            for (int i = 0; i < keys.Length; i++)
+            for (int i = 0; i < this.keys.Length; i++)
             {
-                keys[i] = new byte[CryptoUtils.BlockSize];
+                this.keys[i] = new byte[CryptoUtils.BlockSize];
             }
 
-            flatKeys = new byte[keys.Length * CryptoUtils.BlockSize];
+            this.flatKeys = new byte[this.keys.Length * CryptoUtils.BlockSize];
             key ??= new byte[CryptoUtils.KeySize];
 
             this.galoisMultiplicationTable = new byte[256, 256];
@@ -515,16 +515,16 @@ namespace Kuznyechik
                 throw new ArgumentOutOfRangeException(nameof(this.key), $"Длина ключа должна быть {CryptoUtils.KeySize} байт.");
             }
 
-            key = ImmutableArray.Create(newKey);
+            this.key = ImmutableArray.Create(newKey);
 
-            key.CopyTo(0, keys[0], 0, CryptoUtils.BlockSize);
-            key.CopyTo(CryptoUtils.BlockSize, keys[1], 0, CryptoUtils.BlockSize);
+            this.key.CopyTo(0, this.keys[0], 0, CryptoUtils.BlockSize);
+            this.key.CopyTo(CryptoUtils.BlockSize, this.keys[1], 0, CryptoUtils.BlockSize);
 
             this.GenerationRoundKeys();
 
-            for (int i = 0; i < keys.Length; i++)
+            for (int i = 0; i < this.keys.Length; i++)
             {
-                Buffer.BlockCopy(keys[i], 0, flatKeys, i * CryptoUtils.BlockSize, CryptoUtils.BlockSize);
+                Buffer.BlockCopy(this.keys[i], 0, this.flatKeys, i * CryptoUtils.BlockSize, CryptoUtils.BlockSize);
             }
         }
 
@@ -573,14 +573,14 @@ namespace Kuznyechik
                 int firstPart = i * 2 + 2;
                 int secondPart = i * 2 + 3;
 
-                Array.Copy(keys[firstPart - 2], keys[firstPart], CryptoUtils.BlockSize);
-                Array.Copy(keys[secondPart - 2], keys[secondPart], CryptoUtils.BlockSize);
+                Array.Copy(this.keys[firstPart - 2], this.keys[firstPart], CryptoUtils.BlockSize);
+                Array.Copy(this.keys[secondPart - 2], this.keys[secondPart], CryptoUtils.BlockSize);
 
                 int constantOffset = 8 * i;
 
                 for (int j = 0; j < 8; j++)
                 {
-                    this.FeistelCell(keys[firstPart], keys[secondPart], constants[constantOffset + j]);
+                    this.FeistelCell(this.keys[firstPart], this.keys[secondPart], this.constants[constantOffset + j]);
                 }
             }
         }
@@ -597,8 +597,8 @@ namespace Kuznyechik
             firstKey.CopyTo(tmpKey);
 
             ExclusiveOR(tmpKey, constants);
-            ReplaceBlock(tmpKey, replaceBytes);
-            this.MultiTransform(tmpKey, linearTransformation);
+            ReplaceBlock(tmpKey, this.replaceBytes);
+            this.MultiTransform(tmpKey, this.linearTransformation);
             ExclusiveOR(tmpKey, secondKey);
 
             firstKey.CopyTo(secondKey);
@@ -651,12 +651,12 @@ namespace Kuznyechik
         /// <param name="linearTransformation">Байты линейной трансформации.</param>
         private readonly void TransformBlock(Span<byte> block, ReadOnlySpan<byte> linearTransformation)
         {
-            byte sum = galoisMultiplicationTable[block[0], linearTransformation[0]];
+            byte sum = this.galoisMultiplicationTable[block[0], linearTransformation[0]];
 
             for (int i = 1; i < CryptoUtils.BlockSize; i++)
             {
                 block[i - 1] = block[i];
-                sum ^= galoisMultiplicationTable[block[i], linearTransformation[i]];
+                sum ^= this.galoisMultiplicationTable[block[i], linearTransformation[i]];
             }
 
             block[15] = sum;
