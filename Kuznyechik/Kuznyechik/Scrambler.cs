@@ -77,7 +77,7 @@ namespace Kuznyechik
                 .OpenCL()
                 .CPU()
                 .Math(MathMode.Fast)
-                .Optimize(OptimizationLevel.O2));
+                .Optimize(OptimizationLevel.Debug));
 
             this.Device = this.context.GetPreferredDevice(false);
         }
@@ -344,24 +344,26 @@ namespace Kuznyechik
 
             progress ??= new Progress<CryptoStatus>();
 
-            using (MemoryBuffer1D<byte, Stride1D.Dense> keysBuffer =
-                this.accelerator.Allocate1D(this.parameters.FlatKeys))
-            using (MemoryBuffer1D<byte, Stride1D.Dense> linearTransformationBuffer =
-                this.accelerator.Allocate1D(this.parameters.LinearTransformation))
+            using (MemoryBuffer1D<Block, Stride1D.Dense> keysBuffer =
+                this.accelerator.Allocate1D<Block>(this.parameters.Keys.Length))
+            using (MemoryBuffer1D<Block, Stride1D.Dense> linearTransformationBuffer =
+                this.accelerator.Allocate1D<Block>(new Block[] { this.parameters.LinearTransformation }))
             using (MemoryBuffer1D<byte, Stride1D.Dense> replaceBytesBuffer =
-                this.accelerator.Allocate1D(this.parameters.ReplaceBytes))
-            using (MemoryBuffer2D<byte, Stride2D.DenseX> galoisMultiplicationTable =
-                this.accelerator.Allocate2DDenseX(this.parameters.GaloisMultiplicationTable))
+                this.accelerator.Allocate1D(this.parameters.ReplaceBytesArr))
+            using (MemoryBuffer1D<byte, Stride1D.Dense> galoisTableTmp =
+                this.accelerator.Allocate1D<byte>(65536))
             {
+                ArrayView1D<GaloisTable, Stride1D.Dense> galoisTabltView = galoisTableTmp.View.Cast<byte, GaloisTable>();
+
                 KernelData kernelData = new KernelData()
                 {
                     Keys = keysBuffer.View,
-                    LinearTransformation = linearTransformationBuffer.View,
+                    LinearTransformation = linearTransformationBuffer.View.VariableView(0),
                     ReplaceBytes = replaceBytesBuffer.View,
-                    GaloisMultiplicationTable = galoisMultiplicationTable.View
+                    GaloisTable = galoisTabltView.VariableView(0)
                 };
 
-                Action<Index1D, KernelData> kernel = 
+                Action<Index1D, KernelData> kernel =
                     this.accelerator.LoadAutoGroupedStreamKernel((Action<Index1D, KernelData>)Kernel.Encrypt);
 
                 using (MemoryBuffer1D<byte, Stride1D.Dense> dataBuffer =
@@ -384,19 +386,19 @@ namespace Kuznyechik
                 using (MemoryBuffer1D<byte, Stride1D.Dense> dataBuffer =
                     this.accelerator.Allocate1D<byte>(byteLengthLoss))
                 {
-                    kernelData.Data = dataBuffer.View;
+                    kernelData.Data = dataBuffer.View.Cast<byte, Block>();
 
                     byte[] paddingCount = new byte[] { (byte)(byteLength - readStream.Length) };
                     dataBuffer.View.SubView(dataBuffer.Length - 1, 1).CopyFromCPU(paddingCount);
 
-                    this.ProcessBuffer(dataBuffer, 
-                        readStream, 
-                        writeStream, 
-                        kernel, 
-                        kernelData, 
-                        byteLength, 
-                        byteLengthLoss, 
-                        progress, 
+                    this.ProcessBuffer(dataBuffer,
+                        readStream,
+                        writeStream,
+                        kernel,
+                        kernelData,
+                        byteLength,
+                        byteLengthLoss,
+                        progress,
                         cancellationToken);
                 }
             }
@@ -420,21 +422,23 @@ namespace Kuznyechik
 
             progress ??= new Progress<CryptoStatus>();
 
-            using (MemoryBuffer1D<byte, Stride1D.Dense> keysBuffer =
-                this.accelerator.Allocate1D(this.parameters.FlatKeys))
-            using (MemoryBuffer1D<byte, Stride1D.Dense> linearTransformationBuffer =
-                this.accelerator.Allocate1D(this.parameters.LinearTransformation))
+            using (MemoryBuffer1D<Block, Stride1D.Dense> keysBuffer =
+                this.accelerator.Allocate1D(this.parameters.Keys))
+            using (MemoryBuffer1D<Block, Stride1D.Dense> linearTransformationBuffer =
+                this.accelerator.Allocate1D(new Block[] { this.parameters.LinearTransformation }))
             using (MemoryBuffer1D<byte, Stride1D.Dense> replaceBytesBuffer =
-                this.accelerator.Allocate1D(this.parameters.ReverseReplaceBytes))
-            using (MemoryBuffer2D<byte, Stride2D.DenseX> galoisMultiplicationTable =
-                this.accelerator.Allocate2DDenseX(this.parameters.GaloisMultiplicationTable))
+                this.accelerator.Allocate1D(this.parameters.ReverseReplaceBytesArr))
+            using (MemoryBuffer1D<GaloisTable, Stride1D.Dense> galoisTableBuffer =
+                this.accelerator.Allocate1D<GaloisTable>(1))
             {
+                galoisTableBuffer.CopyFromCPU(new GaloisTable[] { this.parameters.GaloisTable });
+
                 KernelData kernelData = new KernelData()
                 {
                     Keys = keysBuffer.View,
-                    LinearTransformation = linearTransformationBuffer.View,
+                    LinearTransformation = linearTransformationBuffer.View.VariableView(0),
                     ReplaceBytes = replaceBytesBuffer.View,
-                    GaloisMultiplicationTable = galoisMultiplicationTable.View
+                    GaloisTable = galoisTableBuffer.View.VariableView(0)
                 };
 
                 Action<Index1D, KernelData> kernel =
@@ -460,7 +464,7 @@ namespace Kuznyechik
                 using (MemoryBuffer1D<byte, Stride1D.Dense> dataBuffer =
                     this.accelerator.Allocate1D<byte>(byteLengthLoss))
                 {
-                    kernelData.Data = dataBuffer.View;
+                    kernelData.Data = dataBuffer.View.Cast<byte, Block>();
 
                     this.ProcessBufferWithPadding(dataBuffer,
                         readStream,
@@ -535,7 +539,7 @@ namespace Kuznyechik
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
+            
             Index1D index = new Index1D((int)(dataBuffer.Length / CryptoUtils.BlockSize));
 
             this.CopyFromCPU(readStream, dataBuffer, 104857600);
@@ -564,14 +568,13 @@ namespace Kuznyechik
         /// <param name="readStream">Поток чтения данных.</param>
         /// <param name="gpuData">Выделенная память на устройстве.</param>
         /// <param name="bufferLength">Размер буфера.</param>
-        private void CopyFromCPU(Stream readStream, MemoryBuffer1D<byte, Stride1D.Dense> gpuData, int bufferLength)
+        private void CopyFromCPU(Stream readStream, ArrayView1D<byte, Stride1D.Dense> gpuData, int bufferLength)
         {
             byte[] buffer = new byte[bufferLength];
 
             for (long offset = 0; offset < gpuData.Length;)
             {
-                ArrayView<byte> dataPart = gpuData.View.SubView(offset, Math.Min(bufferLength, gpuData.Length - offset));
-
+                ArrayView<byte> dataPart = gpuData.SubView(offset, Math.Min(bufferLength, gpuData.Length - offset));
                 int readBytes = readStream.Read(buffer, 0, dataPart.IntLength);
                 ReadOnlySpan<byte> span = buffer.AsSpan(0, readBytes);
 
@@ -607,7 +610,7 @@ namespace Kuznyechik
         /// <summary>
         /// Получение буфера макимального размера.
         /// </summary>
-        /// <param name="initSize">Максимальный нужный размер.</param>
+        /// <param name="initSize">Количество блоков.</param>
         /// <returns>Буфер максимального размера.</returns>
         /// <exception cref="ArgumentException"></exception>
         /// <exception cref="OutOfMemoryException"></exception>
@@ -619,7 +622,6 @@ namespace Kuznyechik
             {
                 try
                 {
-                    initSize -= initSize % CryptoUtils.BlockSize;
                     return this.accelerator.Allocate1D<byte>(initSize);
                 }
                 catch (Exception) { }

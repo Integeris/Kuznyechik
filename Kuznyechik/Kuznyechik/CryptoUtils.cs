@@ -1,7 +1,4 @@
-﻿using ILGPU;
-using System;
-
-namespace Kuznyechik
+﻿namespace Kuznyechik
 {
     /// <summary>
     /// Методы преобразования данных при шифровании.
@@ -19,25 +16,28 @@ namespace Kuznyechik
         internal const byte KeySize = 32;
 
         /// <summary>
+        /// Количество раундовых ключей.
+        /// </summary>
+        internal const byte RoundKeysLength = 10;
+
+        /// <summary>
         /// Шифрование блока.
         /// </summary>
         /// <param name="block">Блок.</param>
         /// <param name="data">Данные.</param>
-        internal static void EncryptBlock(ArrayView<byte> block, KernelData data)
+        internal static void EncryptBlock(ref Block block, ref KernelData data)
         {
-            ArrayView<byte> key;
-
             for (int i = 0; i < 9; i++)
             {
-                key = data.Keys.SubView(i * BlockSize, BlockSize);
+                ref Block key = ref data.Keys[i];
 
-                ExclusiveOR(block, key);
-                ReplaceBytes(block, data);
-                MultiTransformEncrypt(block, data);
+                block ^= key;
+                ReplaceBytes(ref block, ref data);
+                MultiTransformEncrypt(ref block, ref data);
             }
 
-            key = data.Keys.SubView(9 * BlockSize, BlockSize);
-            ExclusiveOR(block, key);
+            ref Block finalKey = ref data.Keys[9];
+            block ^= finalKey;
         }
 
         /// <summary>
@@ -45,31 +45,18 @@ namespace Kuznyechik
         /// </summary>
         /// <param name="block">Блок.</param>
         /// <param name="data">Данные.</param>
-        internal static void DecryptBlock(ArrayView<byte> block, KernelData data)
+        internal static void DecryptBlock(ref Block block, ref KernelData data)
         {
-            ArrayView<byte> key = data.Keys.SubView(9 * BlockSize, BlockSize);
-            ExclusiveOR(block, key);
+            ref Block firstKey = ref data.Keys[9];
+            block ^= firstKey;
 
             for (int i = 8; i >= 0; i--)
             {
-                key = data.Keys.SubView(i * BlockSize, BlockSize);
+                Block key = data.Keys[i];
 
-                MultiTransformDecrypt(block, data);
-                ReplaceBytes(block, data);
-                ExclusiveOR(block, key);
-            }
-        }
-
-        /// <summary>
-        /// Исключающее ИЛИ для блоков.
-        /// </summary>
-        /// <param name="source">Источник.</param>
-        /// <param name="key">Маска.</param>
-        private static void ExclusiveOR(ArrayView<byte> source, ArrayView<byte> key)
-        {
-            for (int i = 0; i < BlockSize; i++)
-            {
-                source[i] ^= key[i];
+                MultiTransformDecrypt(ref block, ref data);
+                ReplaceBytes(ref block, ref data);
+                block ^= key;
             }
         }
 
@@ -78,11 +65,18 @@ namespace Kuznyechik
         /// </summary>
         /// <param name="block">Блок данных.</param>
         /// <param name="data">Данные.</param>
-        private static void ReplaceBytes(ArrayView<byte> block, KernelData data)
+        private static unsafe void ReplaceBytes(ref Block block, ref KernelData data)
         {
-            for (int i = 0; i < BlockSize; i++)
+            fixed (Block* ptr = &block)
             {
-                block[i] = data.ReplaceBytes[block[i]];
+                byte* current = (byte*)ptr;
+                byte* end = current + BlockSize;
+
+                while (current < end)
+                {
+                    *current = data.ReplaceBytes[*current];
+                    current++;
+                }
             }
         }
 
@@ -91,17 +85,35 @@ namespace Kuznyechik
         /// </summary>
         /// <param name="block">Блок.</param>
         /// <param name="data">Данные.</param>
-        private static void TransformBlock(ArrayView<byte> block, KernelData data)
+        private static unsafe void TransformBlock(ref Block block, ref KernelData data)
         {
-            byte sum = data.GaloisMultiplicationTable[block[0], data.LinearTransformation[0]];
+            ref GaloisTable galoisTable = ref data.GaloisTable.Value;
+            ref Block linearTransformation = ref data.LinearTransformation.Value;
 
-            for (int i = 1; i < BlockSize; i++)
+            fixed (Block* ptr = &block)
             {
-                block[i - 1] = block[i];
-                sum ^= data.GaloisMultiplicationTable[block[i], data.LinearTransformation[i]];
-            }
+                byte* current = (byte*)ptr;
+                byte* end = current + BlockSize - 1;
 
-            block[15] = sum;
+                byte sum = galoisTable[*current, linearTransformation[0]];
+                current++;
+
+                byte index = 1;
+
+                while (current < end)
+                {
+                    current[-1] = *current;
+                    sum ^= galoisTable[*current, linearTransformation[index]];
+
+                    current++;
+                    index++;
+                }
+
+                current[-1] = *current;
+                sum ^= galoisTable[*current, linearTransformation[index]];
+
+                *current = sum;
+            }
         }
 
         /// <summary>
@@ -109,17 +121,26 @@ namespace Kuznyechik
         /// </summary>
         /// <param name="block">Блок.</param>
         /// <param name="data">Данные.</param>
-        private static void ReverseTransformBlock(ArrayView<byte> block, KernelData data)
+        private static unsafe void ReverseTransformBlock(ref Block block, ref KernelData data)
         {
-            byte sum = block[15];
+            ref GaloisTable galoisTable = ref data.GaloisTable.Value;
+            ref Block linearTransformation = ref data.LinearTransformation.Value;
 
-            for (int i = BlockSize - 1; i > 0; i--)
+            fixed (Block* ptr = &block)
             {
-                block[i] = block[i - 1];
-                sum ^= data.GaloisMultiplicationTable[block[i], data.LinearTransformation[i]];
-            }
+                byte* current = (byte*)(ptr + BlockSize - 1);
+                byte sum = *current;
 
-            block[0] = sum;
+                for (int i = BlockSize - 1; i > 0; i--)
+                {
+                    *current = current[-1];
+                    sum ^= galoisTable[*current, linearTransformation[i]];
+
+                    current--;
+                }
+
+                *current = sum;
+            }
         }
 
         /// <summary>
@@ -127,11 +148,11 @@ namespace Kuznyechik
         /// </summary>
         /// <param name="block">Блок.</param>
         /// <param name="data">Данные.</param>
-        private static void MultiTransformEncrypt(ArrayView<byte> block, KernelData data)
+        private static void MultiTransformEncrypt(ref Block block, ref KernelData data)
         {
             for (int i = 0; i < BlockSize; i++)
             {
-                TransformBlock(block, data);
+                TransformBlock(ref block, ref data);
             }
         }
 
@@ -140,11 +161,11 @@ namespace Kuznyechik
         /// </summary>
         /// <param name="block">Блок.</param>
         /// <param name="data">Данные.</param>
-        private static void MultiTransformDecrypt(ArrayView<byte> block, KernelData data)
+        private static void MultiTransformDecrypt(ref Block block, ref KernelData data)
         {
             for (int i = 0; i < BlockSize; i++)
             {
-                ReverseTransformBlock(block, data);
+                ReverseTransformBlock(ref block, ref data);
             }
         }
     }

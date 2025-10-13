@@ -11,17 +11,17 @@ namespace Kuznyechik
         /// <summary>
         /// Данные.
         /// </summary>
-        private ArrayView1D<byte, Stride1D.Dense> data;
+        private ArrayView1D<Block, Stride1D.Dense> data;
 
         /// <summary>
         /// Ключи.
         /// </summary>
-        private ArrayView1D<byte, Stride1D.Dense> keys;
+        private ArrayView1D<Block, Stride1D.Dense> keys;
 
         /// <summary>
         /// Байты линейной трансформации.
         /// </summary>
-        private ArrayView1D<byte, Stride1D.Dense> linearTransformation;
+        private VariableView<Block> linearTransformation;
 
         /// <summary>
         /// Таблица для нелинейного преобразования.
@@ -31,12 +31,12 @@ namespace Kuznyechik
         /// <summary>
         /// Таблица предвычесленных значений поля Галуа.
         /// </summary>
-        private ArrayView2D<byte, Stride2D.DenseX> galoisMultiplicationTable;
+        private VariableView<GaloisTable> galoisTable;
 
         /// <summary>
         /// Данные.
         /// </summary>
-        public ArrayView1D<byte, Stride1D.Dense> Data
+        public ArrayView1D<Block, Stride1D.Dense> Data
         {
             readonly get => this.data;
             set => this.data = value;
@@ -45,7 +45,7 @@ namespace Kuznyechik
         /// <summary>
         /// Ключи.
         /// </summary>
-        public ArrayView1D<byte, Stride1D.Dense> Keys
+        public ArrayView1D<Block, Stride1D.Dense> Keys
         {
             readonly get => this.keys;
             set => this.keys = value;
@@ -54,7 +54,7 @@ namespace Kuznyechik
         /// <summary>
         /// Байты линейной трансформации.
         /// </summary>
-        public ArrayView1D<byte, Stride1D.Dense> LinearTransformation
+        public VariableView<Block> LinearTransformation
         {
             readonly get => this.linearTransformation;
             set => this.linearTransformation = value;
@@ -72,10 +72,10 @@ namespace Kuznyechik
         /// <summary>
         /// Таблица предвычесленных значений поля Галуа.
         /// </summary>
-        public ArrayView2D<byte, Stride2D.DenseX> GaloisMultiplicationTable
+        public VariableView<GaloisTable> GaloisTable
         {
-            readonly get => this.galoisMultiplicationTable;
-            set => this.galoisMultiplicationTable = value;
+            readonly get => this.galoisTable;
+            set => this.galoisTable = value;
         }
 
         /// <summary>
@@ -85,18 +85,18 @@ namespace Kuznyechik
         /// <param name="keys">Ключи.</param>
         /// <param name="linearTransformation">Байты линейной трансформации.</param>
         /// <param name="replaceBytes">Таблица для нелинейного преобразования.</param>
-        /// <param name="galoisMultiplicationTable">Таблица предвычесленных значений поля Галуа.</param>
-        public KernelData(ArrayView1D<byte, Stride1D.Dense> data, 
-            ArrayView1D<byte, Stride1D.Dense> keys, 
-            ArrayView1D<byte, Stride1D.Dense> linearTransformation, 
+        /// <param name="galoisTable">Таблица предвычесленных значений поля Галуа.</param>
+        public KernelData(ArrayView1D<Block, Stride1D.Dense> data, 
+            ArrayView1D<Block, Stride1D.Dense> keys,
+            VariableView<Block> linearTransformation, 
             ArrayView1D<byte, Stride1D.Dense> replaceBytes,
-            ArrayView2D<byte, Stride2D.DenseX> galoisMultiplicationTable)
+            VariableView<GaloisTable> galoisTable)
         {
             this.data = data;
             this.keys = keys;
             this.linearTransformation = linearTransformation;
             this.replaceBytes = replaceBytes;
-            this.galoisMultiplicationTable = galoisMultiplicationTable;
+            this.galoisTable = galoisTable;
         }
     }
 }

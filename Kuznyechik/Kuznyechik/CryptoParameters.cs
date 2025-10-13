@@ -1,17 +1,18 @@
 ﻿using System;
 using System.Collections.Immutable;
+using System.Runtime.InteropServices;
 
 namespace Kuznyechik
 {
     /// <summary>
     /// Параметры для работы алгоритма.
     /// </summary>
-    public struct CryptoParameters
+    public class CryptoParameters
     {
         /// <summary>
         /// Таблица предвычесленных значений поля Галуа.
         /// </summary>
-        private readonly byte[,] galoisMultiplicationTable;
+        private readonly GaloisTable galoisTable;
 
         /// <summary>
         /// Таблица для нелинейного преобразования.
@@ -26,22 +27,17 @@ namespace Kuznyechik
         /// <summary>
         /// Байты линейной трансформации.
         /// </summary>
-        private readonly byte[] linearTransformation;
+        private readonly Block linearTransformation;
 
         /// <summary>
         /// Константы для расчётов.
         /// </summary>
-        private readonly byte[][] constants;
+        private readonly Block[] constants;
 
         /// <summary>
         /// Раундовые ключи.
         /// </summary>
-        private readonly byte[][] keys;
-
-        /// <summary>
-        /// Выровненные раундовые ключи.
-        /// </summary>
-        private readonly byte[] flatKeys;
+        private readonly Block[] keys;
 
         /// <summary>
         /// Ключ.
@@ -51,15 +47,15 @@ namespace Kuznyechik
         /// <summary>
         /// Таблица предвычесленных значений поля Галуа.
         /// </summary>
-        public readonly byte[,] GaloisMultiplicationTable
+        public ReadOnlySpan<byte> GaloisTableBytes
         {
-            get => this.galoisMultiplicationTable;
+            get => this.galoisTable;
         }
 
         /// <summary>
         /// Таблица для нелинейного преобразования.
         /// </summary>
-        public readonly byte[] ReplaceBytes
+        public ReadOnlySpan<byte> ReplaceBytes
         {
             get => this.replaceBytes;
         }
@@ -67,7 +63,7 @@ namespace Kuznyechik
         /// <summary>
         /// Таблица для обратного нелинейного преобразования.
         /// </summary>
-        public readonly byte[] ReverseReplaceBytes
+        public ReadOnlySpan<byte> ReverseReplaceBytes
         {
             get => this.reverseReplaceBytes;
         }
@@ -75,48 +71,80 @@ namespace Kuznyechik
         /// <summary>
         /// Байты линейной трансформации.
         /// </summary>
-        public readonly byte[] LinearTransformation
+        public ReadOnlySpan<byte> LinearTransformationByte
         {
-            get => this.linearTransformation;
+            get => this.linearTransformation.AsSpan();
         }
 
         /// <summary>
         /// Константы для расчётов.
         /// </summary>
-        public readonly byte[][] Constants
+        public ReadOnlySpan<byte> Constants
         {
-            get => this.constants;
+            get => MemoryMarshal.AsBytes(this.constants.AsSpan());
         }
 
         /// <summary>
         /// Раундовые ключи.
         /// </summary>
-        public readonly byte[][] Keys
+        public ReadOnlySpan<byte> KeysByte
         {
-            get => this.keys;
-        }
-
-        /// <summary>
-        /// Выровненные раундовые ключи.
-        /// </summary>
-        public readonly byte[] FlatKeys
-        {
-            get => this.flatKeys;
+            get => MemoryMarshal.AsBytes(this.keys.AsSpan());
         }
 
         /// <summary>
         /// Ключ.
         /// </summary>
-        public readonly ImmutableArray<byte> Key
+        public ImmutableArray<byte> Key
         {
             get => this.key;
+        }
+
+        /// <summary>
+        /// Таблица предвычесленных значений поля Галуа.
+        /// </summary>
+        internal ref readonly GaloisTable GaloisTable
+        {
+            get => ref this.galoisTable;
+        }
+
+        /// <summary>
+        /// Таблица для нелинейного преобразования.
+        /// </summary>
+        internal byte[] ReplaceBytesArr
+        {
+            get => this.replaceBytes;
+        }
+
+        /// <summary>
+        /// Таблица для обратного нелинейного преобразования.
+        /// </summary>
+        internal byte[] ReverseReplaceBytesArr
+        {
+            get => this.reverseReplaceBytes;
+        }
+
+        /// <summary>
+        /// Байты линейной трансформации.
+        /// </summary>
+        internal ref readonly Block LinearTransformation
+        {
+            get => ref this.linearTransformation;
+        }
+
+        /// <summary>
+        /// Раундовые ключи.
+        /// </summary>
+        internal Block[] Keys
+        {
+            get => this.keys;
         }
 
         /// <summary>
         /// Создание параметров для работы алгоритма.
         /// </summary>
         /// <param name="key">Ключ шифрования.</param>
-        public CryptoParameters(byte[] key = default)
+        public unsafe CryptoParameters(ReadOnlySpan<byte> key = default)
         {
             this.replaceBytes = new byte[]
             {
@@ -190,286 +218,99 @@ namespace Kuznyechik
                 0xD6, 0x20, 0x0A, 0x08, 0x00, 0x4C, 0xD7, 0x74
             };
 
-            this.linearTransformation = new byte[]
+            Span<byte> span = stackalloc byte[]
             {
                 1, 148, 32, 133, 16, 194, 192, 1,
                 251, 1, 192, 194, 16, 133, 32, 148
             };
 
-            this.constants = new byte[32][]
+            this.linearTransformation = span;
+
+            this.constants = new Block[32];
+
+            span = stackalloc byte[]
             {
-                new byte[]
-                {
-                    1, 148, 132, 221,
-                    16, 189, 39, 93,
-                    184, 122, 72, 108,
-                    114, 118, 162, 110
-                },
-                new byte[]
-                {
-                    2, 235, 203, 121,
-                    32, 185, 78, 186,
-                    179, 244, 144, 216,
-                    228, 236, 135, 220
-                },
-                new byte[]
-                {
-                    3, 127, 79, 164,
-                    48, 4, 105, 231,
-                    11, 142, 216, 180,
-                    150, 154, 37, 178
-                },
-                new byte[]
-                {
-                    4, 21, 85, 242,
-                    64, 177, 156, 183,
-                    165, 43, 227, 115,
-                    11, 27, 205, 123
-                },
-                new byte[]
-                {
-                    5, 129, 209, 47,
-                    80, 12, 187, 234,
-                    29, 81, 171, 31,
-                    121, 109, 111, 21
-                },
-                new byte[]
-                {
-                    6, 254, 158, 139,
-                    96, 8, 210, 13,
-                    22, 223, 115, 171,
-                    239, 247, 74, 167
-                },
-                new byte[]
-                {
-                    7, 106, 26, 86,
-                    112, 181, 245, 80,
-                    174, 165, 59, 199,
-                    157, 129, 232, 201
-                },
-                new byte[]
-                {
-                    8, 42, 170, 39,
-                    128, 161, 251, 173,
-                    137, 86, 5, 230,
-                    22, 54, 89, 246
-                },
-                new byte[]
-                {
-                    9, 190, 46, 250,
-                    144, 28, 220, 240,
-                    49, 44, 77, 138,
-                    100, 64, 251, 152
-                },
-                new byte[]
-                {
-                    10, 193, 97, 94,
-                    160, 24, 181, 23,
-                    58, 162, 149, 62,
-                    242, 218, 222, 42
-                },
-                new byte[]
-                {
-                    11, 85, 229, 131,
-                    176, 165, 146, 74,
-                    130, 216, 221, 82,
-                    128, 172, 124, 68
-                },
-                new byte[]
-                {
-                    12, 63, 255, 213,
-                    192, 16, 103, 26,
-                    44, 125, 230, 149,
-                    29, 45, 148, 141
-                },
-                new byte[]
-                {
-                    13, 171, 123, 8,
-                    208, 173, 64, 71,
-                    148, 7, 174, 249,
-                    111, 91, 54, 227
-                },
-                new byte[]
-                {
-                    14, 212, 52, 172,
-                    224, 169, 41, 160,
-                    159, 137, 118, 77,
-                    249, 193, 19, 81
-                },
-                new byte[]
-                {
-                    15, 64, 176, 113,
-                    240, 20, 14, 253,
-                    39, 243, 62, 33,
-                    139, 183, 177, 63
-                },
-                new byte[]
-                {
-                    16, 84, 151, 78,
-                    195, 129, 53, 153,
-                    209, 172, 10, 15,
-                    44, 108, 178, 47
-                },
-                new byte[]
-                {
-                    17, 192, 19, 147,
-                    211, 60, 18, 196,
-                    105, 214, 66, 99,
-                    94, 26, 16, 65
-                },
-                new byte[]
-                {
-                    18, 191, 92, 55,
-                    227, 56, 123, 35,
-                    98, 88, 154, 215,
-                    200, 128, 53, 243
-                },
-                new byte[]
-                {
-                    19, 43, 216, 234,
-                    243, 133, 92, 126,
-                    218, 34, 210, 187,
-                    186, 246, 151, 157
-                },
-                new byte[]
-                {
-                    20, 65, 194, 188,
-                    131, 48, 169, 46,
-                    116, 135, 233, 124,
-                    39, 119, 127, 84
-                },
-                new byte[]
-                {
-                    21, 213, 70, 97,
-                    147, 141, 142, 115,
-                    204, 253, 161, 16,
-                    85, 1, 221, 58
-                },
-                new byte[]
-                {
-                    22, 170, 9, 197,
-                    163, 137, 231, 148,
-                    199, 115, 121, 164,
-                    195, 155, 248, 136
-                },
-                new byte[]
-                {
-                    23, 62, 141, 24,
-                    179, 52, 192, 201,
-                    127, 9, 49, 200,
-                    177, 237, 90, 230
-                },
-                new byte[]
-                {
-                    24, 126, 61, 105,
-                    67, 32, 206, 52,
-                    88, 250, 15, 233,
-                    58, 90, 235, 217
-                },
-                new byte[]
-                {
-                    25, 234, 185, 180,
-                    83, 157, 233, 105,
-                    224, 128, 71, 133,
-                    72, 44, 73, 183
-                },
-                new byte[]
-                {
-                    26, 149, 246, 16,
-                    99, 153, 128, 142,
-                    235, 14, 159, 49,
-                    222, 182, 108, 5
-                },
-                new byte[]
-                {
-                    27, 1, 114, 205,
-                    115, 36, 167, 211,
-                    83, 116, 215, 93,
-                    172, 192, 206, 107
-                },
-                new byte[]
-                {
-                    28, 107, 104, 155,
-                    3, 145, 82, 131,
-                    253, 209, 236, 154,
-                    49, 65, 38, 162
-                },new byte[]
-                {
-                    29, 255, 236, 70,
-                    19, 44, 117, 222,
-                    69, 171, 164, 246,
-                    67, 55, 132, 204
-                },
-                new byte[]
-                {
-                    30, 128, 163, 226,
-                    35, 40, 28, 57,
-                    78, 37, 124, 66,
-                    213, 173, 161, 126
-                },
-                new byte[]
-                {
-                    31, 20, 39, 63,
-                    51, 149, 59, 100,
-                    246, 95, 52, 46,
-                    167, 219, 3, 16
-                },
-                new byte[]
-                {
-                    32, 168, 237, 156,
-                    69, 193, 106, 241,
-                    97, 155, 20, 30,
-                    88, 216, 167, 94
-                }
+                1, 148, 132, 221, 16, 189, 39, 93, 184, 122, 72, 108, 114, 118, 162, 110,
+                2, 235, 203, 121, 32, 185, 78, 186, 179, 244, 144, 216, 228, 236, 135, 220,
+                3, 127, 79, 164, 48, 4, 105, 231, 11, 142, 216, 180, 150, 154, 37, 178,
+                4, 21, 85, 242, 64, 177, 156, 183, 165, 43, 227, 115, 11, 27, 205, 123,
+                5, 129, 209, 47, 80, 12, 187, 234, 29, 81, 171, 31, 121, 109, 111, 21,
+                6, 254, 158, 139, 96, 8, 210, 13, 22, 223, 115, 171, 239, 247, 74, 167,
+                7, 106, 26, 86, 112, 181, 245, 80, 174, 165, 59, 199, 157, 129, 232, 201,
+                8, 42, 170, 39, 128, 161, 251, 173, 137, 86, 5, 230, 22, 54, 89, 246,
+                9, 190, 46, 250,144, 28, 220, 240, 49, 44, 77, 138, 100, 64, 251, 152,
+                10, 193, 97, 94, 160, 24, 181, 23, 58, 162, 149, 62, 242, 218, 222, 42,
+                11, 85, 229, 131, 176, 165, 146, 74, 130, 216, 221, 82, 128, 172, 124, 68,
+                12, 63, 255, 213, 192, 16, 103, 26, 44, 125, 230, 149, 29, 45, 148, 141,
+                13, 171, 123, 8, 208, 173, 64, 71, 148, 7, 174, 249, 111, 91, 54, 227,
+                14, 212, 52, 172, 224, 169, 41, 160, 159, 137, 118, 77, 249, 193, 19, 81,
+                15, 64, 176, 113, 240, 20, 14, 253, 39, 243, 62, 33, 139, 183, 177, 63,
+                16, 84, 151, 78, 195, 129, 53, 153, 209, 172, 10, 15, 44, 108, 178, 47,
+                17, 192, 19, 147, 211, 60, 18, 196, 105, 214, 66, 99, 94, 26, 16, 65,
+                18, 191, 92, 55, 227, 56, 123, 35, 98, 88, 154, 215, 200, 128, 53, 243,
+                19, 43, 216, 234, 243, 133, 92, 126, 218, 34, 210, 187, 186, 246, 151, 157,
+                20, 65, 194, 188, 131, 48, 169, 46, 116, 135, 233, 124, 39, 119, 127, 84,
+                21, 213, 70, 97, 147, 141, 142, 115, 204, 253, 161, 16, 85, 1, 221, 58,
+                22, 170, 9, 197, 163, 137, 231, 148, 199, 115, 121, 164, 195, 155, 248, 136,
+                23, 62, 141, 24, 179, 52, 192, 201, 127, 9, 49, 200, 177, 237, 90, 230,
+                24, 126, 61, 105, 67, 32, 206, 52, 88, 250, 15, 233, 58, 90, 235, 217,
+                25, 234, 185, 180, 83, 157, 233, 105, 224, 128, 71, 133, 72, 44, 73, 183,
+                26, 149, 246, 16, 99, 153, 128, 142, 235, 14, 159, 49, 222, 182, 108, 5,
+                27, 1, 114, 205, 115, 36, 167, 211, 83, 116, 215, 93, 172, 192, 206, 107,
+                28, 107, 104, 155, 3, 145, 82, 131, 253, 209, 236, 154, 49, 65, 38, 162,
+                29, 255, 236, 70, 19, 44, 117, 222, 69, 171, 164, 246, 67, 55, 132, 204,
+                30, 128, 163, 226, 35, 40, 28, 57, 78, 37, 124, 66, 213, 173, 161, 126,
+                31, 20, 39, 63, 51, 149, 59, 100, 246, 95, 52, 46, 167, 219, 3, 16,
+                32, 168, 237, 156, 69, 193, 106, 241, 97, 155, 20, 30, 88, 216, 167, 94
             };
 
-            this.keys = new byte[10][];
-
-            for (int i = 0; i < this.keys.Length; i++)
+            fixed (byte* srcPtr = span)
+            fixed (Block* destPtr = this.constants)
             {
-                this.keys[i] = new byte[CryptoUtils.BlockSize];
+                Buffer.MemoryCopy(srcPtr, destPtr, span.Length, span.Length);
             }
 
-            this.flatKeys = new byte[this.keys.Length * CryptoUtils.BlockSize];
-            key ??= new byte[CryptoUtils.KeySize];
+            this.keys = new Block[CryptoUtils.RoundKeysLength];
 
-            this.galoisMultiplicationTable = new byte[256, 256];
-
-            for (int i = Byte.MinValue; i <= Byte.MaxValue; i++)
+            if (key.IsEmpty)
             {
-                for (int j = Byte.MinValue; j <= Byte.MaxValue; j++)
-                {
-                    this.galoisMultiplicationTable[i, j] = GaloisMultiplication((byte)i, (byte)j);
-                }
+                key = new byte[CryptoUtils.KeySize];
             }
 
+            this.galoisTable = new GaloisTable();
             this.SetNewKey(key);
         }
 
         /// <summary>
         /// Создание параметров для работы алгоритма.
         /// </summary>
+        /// <param name="key">Ключ шифрования.</param>
         /// <param name="replaceBytes">Таблица для нелинейного преобразования.</param>
         /// <param name="reverseReplaceBytes">Таблица для обратного нелинейного преобразования.</param>
         /// <param name="linearTransformation">Байты линейной трансформации.</param>
         /// <param name="constants">Константы для расчётов.</param>
-        public CryptoParameters(byte[] replaceBytes, byte[] reverseReplaceBytes, byte[] linearTransformation, byte[][] constants) : this()
+        public CryptoParameters(
+            ReadOnlySpan<byte> key,
+            ReadOnlySpan<byte> replaceBytes,
+            ReadOnlySpan<byte> reverseReplaceBytes,
+            ReadOnlySpan<byte> linearTransformation,
+            ReadOnlySpan<byte> constants) : this(key)
         {
-            if (replaceBytes == null)
+            if (replaceBytes.IsEmpty)
             {
-                throw new ArgumentNullException(nameof(replaceBytes), "Таблица для нелинейнонго преобразования не может быть null.");
+                throw new ArgumentNullException(nameof(replaceBytes), "Таблица для нелинейнонго преобразования не может быть пустой.");
             }
-            else if (reverseReplaceBytes == null)
+            else if (reverseReplaceBytes.IsEmpty)
             {
-                throw new ArgumentNullException(nameof(reverseReplaceBytes), "Таблица для обратного нелинейнонго преобразования не может быть null.");
+                throw new ArgumentNullException(nameof(reverseReplaceBytes), "Таблица для обратного нелинейнонго преобразования не может быть пустой.");
             }
-            else if (linearTransformation == null)
+            else if (linearTransformation.IsEmpty)
             {
-                throw new ArgumentNullException(nameof(linearTransformation), "Байты линейной трансформации не могут быть null.");
+                throw new ArgumentNullException(nameof(linearTransformation), "Таблица линейной трансформации не может быть пустой.");
             }
-            else if (constants == null)
+            else if (constants.IsEmpty)
             {
-                throw new ArgumentNullException(nameof(constants), "Константы не могут быть null.");
+                throw new ArgumentNullException(nameof(constants), "Таблица констант не может быть пустой.");
             }
             else if (replaceBytes.Length != 256)
             {
@@ -481,21 +322,28 @@ namespace Kuznyechik
             }
             else if (linearTransformation.Length != 16)
             {
-                throw new ArgumentException("Байты линейной трансформации должны иметь длину 16 байт.", nameof(linearTransformation));
+                throw new ArgumentException("Таблица линейной трансформации должна иметь длину 16 байт.", nameof(linearTransformation));
             }
-            else if (constants.Length != 32)
+            else if (constants.Length != 512)
             {
-                throw new ArgumentException("Количество массивов констант должно быть 32.", nameof(constants));
-            }
-            else if (constants[0].Length != CryptoUtils.BlockSize)
-            {
-                throw new ArgumentException($"Массив констант должен быть длинной {CryptoUtils.BlockSize}.", nameof(constants));
+                throw new ArgumentException($"Массив констант должен быть длинной 512 байт.", nameof(constants));
             }
 
-            Array.Copy(replaceBytes, this.replaceBytes, replaceBytes.Length);
-            Array.Copy(reverseReplaceBytes, this.reverseReplaceBytes, reverseReplaceBytes.Length);
-            Array.Copy(linearTransformation, this.linearTransformation, linearTransformation.Length);
-            Array.Copy(constants, this.constants, constants.Length);
+            replaceBytes.CopyTo(this.replaceBytes);
+            reverseReplaceBytes.CopyTo(this.reverseReplaceBytes);
+
+            this.linearTransformation = linearTransformation;
+
+            unsafe
+            {
+                fixed (byte* srcPtr = constants)
+                fixed (Block* destPtr = this.constants)
+                {
+                    Buffer.MemoryCopy(srcPtr, destPtr, constants.Length, constants.Length);
+                }
+            }
+
+            this.GenerationRoundKeys();
         }
 
         /// <summary>
@@ -504,83 +352,45 @@ namespace Kuznyechik
         /// <param name="newKey">Новый ключ.</param>
         /// <exception cref="ArgumentException"></exception>
         /// <exception cref="ArgumentOutOfRangeException"></exception>
-        public void SetNewKey(byte[] newKey)
+        public void SetNewKey(ReadOnlySpan<byte> newKey)
         {
-            if (newKey == null)
+            if (newKey.IsEmpty)
             {
-                throw new ArgumentException("Ключ не может быть null.", nameof(this.key));
+                throw new ArgumentException("Ключ не может быть пустым.", nameof(this.key));
             }
             else if (newKey.Length != CryptoUtils.KeySize)
             {
                 throw new ArgumentOutOfRangeException(nameof(this.key), $"Длина ключа должна быть {CryptoUtils.KeySize} байт.");
             }
 
-            this.key = ImmutableArray.Create(newKey);
-
-            this.key.CopyTo(0, this.keys[0], 0, CryptoUtils.BlockSize);
-            this.key.CopyTo(CryptoUtils.BlockSize, this.keys[1], 0, CryptoUtils.BlockSize);
-
+            this.key = newKey.ToImmutableArray();
             this.GenerationRoundKeys();
-
-            for (int i = 0; i < this.keys.Length; i++)
-            {
-                Buffer.BlockCopy(this.keys[i], 0, this.flatKeys, i * CryptoUtils.BlockSize, CryptoUtils.BlockSize);
-            }
         }
-
-        /// <summary>
-        /// Умножение чисел в поле Галуа.
-        /// </summary>
-        /// <param name="origin">Исходный байт.</param>
-        /// <param name="key">Байт ключа.</param>
-        /// <returns>Результат умножения по Галуа.</returns>
-        private static byte GaloisMultiplication(byte origin, byte key)
-        {
-            byte result = 0;
-
-            // цикл для каждого бита (в байте 8 битов)
-            for (int i = 0; i < 8; i++)
-            {
-                // Если младший бит ключа равен 1.
-                if ((key & 0b01) == 1)
-                {
-                    result ^= origin;
-                }
-
-                key >>= 1;
-
-                // Вычисляем старший бит исходного байта.
-                byte higherBit = (byte)(origin & 0b10000000);
-                origin <<= 1;
-
-                if (higherBit != 0)
-                {
-                    // Неприводимый полином для поля Галуа: x^8 + x^7 + x^6 + x + 1
-                    origin ^= 195;
-                }
-            }
-
-            return result;
-        }
-
+        
         /// <summary>
         /// Генерация раундовых ключей.
         /// </summary>
-        private readonly void GenerationRoundKeys()
+        private void GenerationRoundKeys()
         {
+            this.keys[0] = this.key[..CryptoUtils.BlockSize].AsSpan();
+            this.keys[1] = this.key[CryptoUtils.BlockSize..].AsSpan();
+
             for (int i = 0; i < 4; i++)
             {
-                int firstPart = i * 2 + 2;
-                int secondPart = i * 2 + 3;
+                int firstIndex = i * 2 + 2;
+                int secondIndex = i * 2 + 3;
 
-                Array.Copy(this.keys[firstPart - 2], this.keys[firstPart], CryptoUtils.BlockSize);
-                Array.Copy(this.keys[secondPart - 2], this.keys[secondPart], CryptoUtils.BlockSize);
+                ref Block firstKey = ref this.keys[firstIndex];
+                ref Block secondKey = ref this.keys[secondIndex];
+
+                firstKey = this.keys[firstIndex - 2];
+                secondKey = this.keys[secondIndex - 2];
 
                 int constantOffset = 8 * i;
 
                 for (int j = 0; j < 8; j++)
                 {
-                    this.FeistelCell(this.keys[firstPart], this.keys[secondPart], this.constants[constantOffset + j]);
+                    this.FeistelCell(ref firstKey, ref secondKey, ref this.constants[constantOffset + j]);
                 }
             }
         }
@@ -590,44 +400,37 @@ namespace Kuznyechik
         /// </summary>
         /// <param name="firstKey">Первый ключ.</param>
         /// <param name="secondKey">Второй ключ.</param>
-        /// <param name="constants">Константы.</param>
-        private readonly void FeistelCell(Span<byte> firstKey, Span<byte> secondKey, Span<byte> constants)
+        /// <param name="constant">Константа.</param>
+        private void FeistelCell(ref Block firstKey, ref Block secondKey, ref Block constant)
         {
-            Span<byte> tmpKey = stackalloc byte[CryptoUtils.BlockSize];
-            firstKey.CopyTo(tmpKey);
+            Block tmpKey = firstKey ^ constant;
 
-            ExclusiveOR(tmpKey, constants);
-            ReplaceBlock(tmpKey, this.replaceBytes);
-            this.MultiTransform(tmpKey, this.linearTransformation);
-            ExclusiveOR(tmpKey, secondKey);
+            this.ReplaceBlock(ref tmpKey);
+            this.MultiTransform(ref tmpKey);
 
-            firstKey.CopyTo(secondKey);
-            tmpKey.CopyTo(firstKey);
-        }
+            tmpKey ^= secondKey;
 
-        /// <summary>
-        /// Исключающее ИЛИ для блоков.
-        /// </summary>
-        /// <param name="source">Источник.</param>
-        /// <param name="key">Маска.</param>
-        private static void ExclusiveOR(Span<byte> source, ReadOnlySpan<byte> key)
-        {
-            for (int i = 0; i < CryptoUtils.BlockSize; i++)
-            {
-                source[i] ^= key[i];
-            }
+            secondKey = firstKey;
+            firstKey = tmpKey;
         }
 
         /// <summary>
         /// Замена байт блока на байты из указанной таблицы.
         /// </summary>
         /// <param name="block">Блок данных.</param>
-        /// <param name="replaceBytes">Таблица замены.</param>
-        private static void ReplaceBlock(Span<byte> block, ReadOnlySpan<byte> replaceBytes)
+        private unsafe void ReplaceBlock(ref Block block)
         {
-            for (int i = 0; i < CryptoUtils.BlockSize; i++)
+            fixed (Block* blockPtr = &block)
+            fixed (byte* replaceBytesPtr = this.replaceBytes)
             {
-                block[i] = replaceBytes[block[i]];
+                byte* current = (byte*)blockPtr;
+                byte* end = current + CryptoUtils.BlockSize;
+
+                while (current < end)
+                {
+                    *current = replaceBytesPtr[*current];
+                    current++;
+                }
             }
         }
 
@@ -635,12 +438,11 @@ namespace Kuznyechik
         /// Шифрование блока.
         /// </summary>
         /// <param name="block">Блок.</param>
-        /// <param name="linearTransformation">Байты линейной трансформации.</param>
-        private readonly void MultiTransform(Span<byte> block, ReadOnlySpan<byte> linearTransformation)
+        private void MultiTransform(ref Block block)
         {
             for (int i = 0; i < CryptoUtils.BlockSize; i++)
             {
-                this.TransformBlock(block, linearTransformation);
+                this.TransformBlock(ref block);
             }
         }
 
@@ -648,18 +450,32 @@ namespace Kuznyechik
         /// Трансформация блока.
         /// </summary>
         /// <param name="block">Блок.</param>
-        /// <param name="linearTransformation">Байты линейной трансформации.</param>
-        private readonly void TransformBlock(Span<byte> block, ReadOnlySpan<byte> linearTransformation)
+        private unsafe void TransformBlock(ref Block block)
         {
-            byte sum = this.galoisMultiplicationTable[block[0], linearTransformation[0]];
-
-            for (int i = 1; i < CryptoUtils.BlockSize; i++)
+            fixed (Block* ptr = &block)
             {
-                block[i - 1] = block[i];
-                sum ^= this.galoisMultiplicationTable[block[i], linearTransformation[i]];
-            }
+                byte* current = (byte*)ptr;
+                byte* end = current + CryptoUtils.BlockSize - 1;
 
-            block[15] = sum;
+                byte sum = this.galoisTable[*current, this.linearTransformation[0]];
+                current++;
+
+                byte index = 1;
+
+                while (current < end)
+                {
+                    current[-1] = *current;
+                    sum ^= this.galoisTable[*current, this.linearTransformation[index]];
+
+                    current++;
+                    index++;
+                }
+
+                current[-1] = *current;
+                sum ^= this.galoisTable[*current, this.linearTransformation[index]];
+
+                *current = sum;
+            }
         }
     }
 }

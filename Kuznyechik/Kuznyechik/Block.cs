@@ -1,22 +1,31 @@
 ﻿using System;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Kuznyechik
 {
     /// <summary>
     /// Блок данных (16 байт).
     /// </summary>
-    [StructLayout(LayoutKind.Sequential, Size = 16)]
-    internal struct Block : IEquatable<Block>
+    [StructLayout(LayoutKind.Explicit, Size = CryptoUtils.BlockSize)]
+    internal unsafe struct Block : IEquatable<Block>
     {
+        /// <summary>
+        /// Указатель на начало структуры.
+        /// </summary>
+        [FieldOffset(0)]
+        private fixed byte bytes[CryptoUtils.BlockSize];
+
         /// <summary>
         /// Первая половина блока.
         /// </summary>
+        [FieldOffset(0)]
         private ulong low;
 
         /// <summary>
         /// Вторая половина блока.
         /// </summary>
+        [FieldOffset(sizeof(ulong))]
         private ulong high;
 
         /// <summary>
@@ -54,8 +63,37 @@ namespace Kuznyechik
         /// <returns>Строковое представление блока.</returns>
         public override readonly string ToString()
         {
-            byte[] bytes = this;
-            return $"[{String.Join(", ", bytes)}]";
+            StringBuilder stringBuilder = new StringBuilder("[");
+
+            fixed (byte* value = this.bytes)
+            {
+                byte* ptr = value;
+                byte* end = value + CryptoUtils.BlockSize - 1;
+
+                while (ptr < end)
+                {
+                    stringBuilder.Append(*ptr);
+                    stringBuilder.Append(", ");
+                    ptr++;
+                }
+
+                stringBuilder.Append(*ptr);
+            }
+            
+            stringBuilder.Append("]");
+            return stringBuilder.ToString();
+        }
+
+        /// <summary>
+        /// Получить блок как Span.
+        /// </summary>
+        /// <returns>Span байтов блока.</returns>
+        public readonly unsafe Span<byte> AsSpan()
+        {
+            fixed (byte* ptr = this.bytes)
+            {
+                return new Span<byte>(ptr, CryptoUtils.BlockSize);
+            }
         }
 
         /// <summary>
@@ -101,7 +139,7 @@ namespace Kuznyechik
         /// Преобразование массива в блок.
         /// </summary>
         /// <param name="data">Массив данных.</param>
-        public static unsafe implicit operator Block(byte[] data)
+        public static implicit operator Block(byte[] data)
         {
             if (data == null)
             {
@@ -125,10 +163,42 @@ namespace Kuznyechik
         }
 
         /// <summary>
+        /// Преобразование ReadOnlySpan в блок.
+        /// </summary>
+        /// <param name="data">Массив данных.</param>
+        public static implicit operator Block(ReadOnlySpan<byte> data)
+        {
+            if (data.Length != CryptoUtils.BlockSize)
+            {
+                throw new ArgumentException("Массив должен содержать 16 байт");
+            }
+
+            fixed (byte* ptr = &MemoryMarshal.GetReference(data))
+            {
+                Block block = new Block
+                {
+                    low = *(ulong*)ptr,
+                    high = *(ulong*)(ptr + sizeof(ulong))
+                };
+
+                return block;
+            }
+        }
+
+        /// <summary>
+        /// Преобразование Span в блок.
+        /// </summary>
+        /// <param name="data">Массив данных.</param>
+        public static implicit operator Block(Span<byte> data)
+        {
+            return (ReadOnlySpan<byte>)data;
+        }
+
+        /// <summary>
         /// Преобразование блока в массив.
         /// </summary>
         /// <param name="block">Блок.</param>
-        public static unsafe implicit operator byte[](Block block)
+        public static implicit operator byte[](Block block)
         {
             byte[] result = new byte[CryptoUtils.BlockSize];
 
@@ -139,6 +209,40 @@ namespace Kuznyechik
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Получение байта по индексу.
+        /// </summary>
+        /// <param name="index">Индекс.</param>
+        /// <returns>Байт по индексу.</returns>
+        /// <exception cref="IndexOutOfRangeException"></exception>
+        public byte this[int index]
+        {
+            get
+            {
+                if ((uint)index >= CryptoUtils.BlockSize)
+                {
+                    throw new IndexOutOfRangeException();
+                }
+
+                fixed (byte* ptr = this.bytes)
+                {
+                    return ptr[index];
+                }
+            }
+            set
+            {
+                if ((uint)index >= CryptoUtils.BlockSize)
+                {
+                    throw new IndexOutOfRangeException();
+                }
+
+                fixed (byte* ptr = this.bytes)
+                {
+                    ptr[index] = value;
+                }
+            }
         }
     }
 }
