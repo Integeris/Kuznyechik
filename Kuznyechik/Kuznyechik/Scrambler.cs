@@ -1,9 +1,4 @@
-﻿using ILGPU;
-using ILGPU.Runtime;
-using ILGPU.Runtime.CPU;
-using ILGPU.Runtime.Cuda;
-using ILGPU.Runtime.OpenCL;
-using System;
+﻿using System;
 using System.Collections.Immutable;
 using System.IO;
 using System.Threading;
@@ -14,7 +9,7 @@ namespace Kuznyechik
     /// <summary>
     /// Шифровщик (алгоритм "Кузнечик").
     /// </summary>
-    public sealed class Scrambler: IDisposable
+    public sealed class Scrambler : IDisposable
     {
         /// <summary>
         /// Параметры.
@@ -27,41 +22,11 @@ namespace Kuznyechik
         private bool disposed;
 
         /// <summary>
-        /// Контекст ILGPU.
-        /// </summary>
-        private readonly Context context;
-
-        /// <summary>
-        /// Устройство.
-        /// </summary>
-        private Device device;
-
-        /// <summary>
-        /// Акселератор.
-        /// </summary>
-        private Accelerator accelerator;
-
-        /// <summary>
         /// Параметры.
         /// </summary>
         public CryptoParameters Parameters
         {
             get => this.parameters;
-        }
-
-        /// <summary>
-        /// Устройство.
-        /// </summary>
-        public Device Device
-        {
-            get => this.device;
-            set
-            {
-                this.accelerator?.Dispose();
-
-                this.device = value;
-                this.accelerator = this.device.CreateAccelerator(this.context);
-            }
         }
 
         /// <summary>
@@ -71,15 +36,6 @@ namespace Kuznyechik
         public Scrambler(CryptoParameters parameters)
         {
             this.parameters = parameters;
-
-            this.context = Context.Create(builder => builder
-                .Cuda()
-                .OpenCL()
-                .CPU()
-                .Math(MathMode.Fast)
-                .Optimize(OptimizationLevel.Debug));
-
-            this.Device = this.context.GetPreferredDevice(false);
         }
 
         /// <summary>
@@ -134,8 +90,8 @@ namespace Kuznyechik
         /// <returns>Задча шифрования.</returns>
         /// <exception cref="ArgumentException"></exception>
         public async Task<byte[]> EncryptAsync(
-            byte[] arr, 
-            IProgress<CryptoStatus> progress = default, 
+            byte[] arr,
+            IProgress<CryptoStatus> progress = default,
             CancellationToken cancellationToken = default)
         {
             using (MemoryStream readStream = new MemoryStream())
@@ -158,7 +114,7 @@ namespace Kuznyechik
         /// <param name="cancellationToken">Токен отмены операции.</param>
         /// <returns>Задача шифрования.</returns>
         public async Task EncryptAsync(
-            Stream readStream, 
+            Stream readStream,
             Stream writeStream,
             IProgress<CryptoStatus> progress = default,
             CancellationToken cancellationToken = default)
@@ -208,8 +164,8 @@ namespace Kuznyechik
         /// <param name="cancellationToken">Токен отмены операции.</param>
         /// <returns>Задача расшифровки.</returns>
         public async Task<byte[]> DecryptAsync(
-            byte[] arr, 
-            IProgress<CryptoStatus> progress = default, 
+            byte[] arr,
+            IProgress<CryptoStatus> progress = default,
             CancellationToken cancellationToken = default)
         {
             using (MemoryStream readStream = new MemoryStream())
@@ -233,7 +189,7 @@ namespace Kuznyechik
         /// <returns>Задача расшифровки.</returns>
         /// <exception cref="ArgumentException"></exception>
         public async Task DecryptAsync(
-            Stream readStream, 
+            Stream readStream,
             Stream writeStream,
             IProgress<CryptoStatus> progress = default,
             CancellationToken cancellationToken = default)
@@ -255,26 +211,14 @@ namespace Kuznyechik
         /// </summary>
         public void Dispose()
         {
+            // TODO: Рассмотреть удаление метода Dispose.
             if (this.disposed)
             {
                 return;
             }
 
-            this.accelerator.Dispose();
-            this.context.Dispose();
-            this.device = null;
-
             GC.SuppressFinalize(this);
             this.disposed = true;
-        }
-
-        /// <summary>
-        /// Получение всех устройств.
-        /// </summary>
-        /// <returns>Все устройства.</returns>
-        public ImmutableArray<Device> GetDevices()
-        {
-            return this.context.Devices;
         }
 
         /// <summary>
@@ -333,75 +277,50 @@ namespace Kuznyechik
         /// <param name="progress">Прогресс операции.</param>
         /// <param name="cancellationToken">Токен отмены операции.</param>
         private void EncryptProcess(
-            Stream readStream, 
+            Stream readStream,
             Stream writeStream,
             IProgress<CryptoStatus> progress = default,
             CancellationToken cancellationToken = default)
         {
-            long readableBytes = readStream.Length - readStream.Position;
-            long byteLength = readableBytes + (CryptoUtils.BlockSize - readableBytes % CryptoUtils.BlockSize);
-            long byteLengthLoss = byteLength;
-
             progress ??= new Progress<CryptoStatus>();
 
-            using (MemoryBuffer1D<Block, Stride1D.Dense> keysBuffer =
-                this.accelerator.Allocate1D<Block>(this.parameters.Keys.Length))
-            using (MemoryBuffer1D<Block, Stride1D.Dense> linearTransformationBuffer =
-                this.accelerator.Allocate1D<Block>(new Block[] { this.parameters.LinearTransformation }))
-            using (MemoryBuffer1D<byte, Stride1D.Dense> replaceBytesBuffer =
-                this.accelerator.Allocate1D(this.parameters.ReplaceBytesArr))
-            using (MemoryBuffer1D<byte, Stride1D.Dense> galoisTableTmp =
-                this.accelerator.Allocate1D<byte>(65536))
+            long totalBytes = readStream.Length - readStream.Position;
+            long blockCount = totalBytes / CryptoUtils.BlockSize;
+            byte remainingBytes = (byte)(CryptoUtils.BlockSize - totalBytes % CryptoUtils.BlockSize);
+
+            Block block;
+            CryptoStatus status;
+
+            byte[] buffer = new byte[CryptoUtils.BlockSize];
+
+            for (; blockCount > 0; blockCount--)
             {
-                ArrayView1D<GaloisTable, Stride1D.Dense> galoisTabltView = galoisTableTmp.View.Cast<byte, GaloisTable>();
+                cancellationToken.ThrowIfCancellationRequested();
 
-                KernelData kernelData = new KernelData()
-                {
-                    Keys = keysBuffer.View,
-                    LinearTransformation = linearTransformationBuffer.View.VariableView(0),
-                    ReplaceBytes = replaceBytesBuffer.View,
-                    GaloisTable = galoisTabltView.VariableView(0)
-                };
+                readStream.Read(buffer, 0, CryptoUtils.BlockSize);
 
-                Action<Index1D, KernelData> kernel =
-                    this.accelerator.LoadAutoGroupedStreamKernel((Action<Index1D, KernelData>)Kernel.Encrypt);
+                block = buffer;
+                CryptoUtils.EncryptBlock(ref block, this.parameters);
+                buffer = block;
 
-                using (MemoryBuffer1D<byte, Stride1D.Dense> dataBuffer =
-                    this.GetMaxBuffer(byteLengthLoss))
-                {
-                    for (; byteLengthLoss > dataBuffer.Length; byteLengthLoss -= dataBuffer.Length)
-                    {
-                        this.ProcessBuffer(dataBuffer,
-                        readStream,
-                        writeStream,
-                        kernel,
-                        kernelData,
-                        byteLength,
-                        byteLengthLoss,
-                        progress,
-                        cancellationToken);
-                    }
-                }
+                writeStream.Write(buffer, 0, buffer.Length);
 
-                using (MemoryBuffer1D<byte, Stride1D.Dense> dataBuffer =
-                    this.accelerator.Allocate1D<byte>(byteLengthLoss))
-                {
-                    kernelData.Data = dataBuffer.View.Cast<byte, Block>();
-
-                    byte[] paddingCount = new byte[] { (byte)(byteLength - readStream.Length) };
-                    dataBuffer.View.SubView(dataBuffer.Length - 1, 1).CopyFromCPU(paddingCount);
-
-                    this.ProcessBuffer(dataBuffer,
-                        readStream,
-                        writeStream,
-                        kernel,
-                        kernelData,
-                        byteLength,
-                        byteLengthLoss,
-                        progress,
-                        cancellationToken);
-                }
+                status = new CryptoStatus(readStream.Position, readStream.Length, CryptoUtils.BlockSize);
+                progress.Report(status);
             }
+
+            readStream.Read(buffer, 0, CryptoUtils.BlockSize);
+
+            buffer[^1] = remainingBytes;
+
+            block = buffer;
+            CryptoUtils.EncryptBlock(ref block, this.parameters);
+            buffer = block;
+
+            writeStream.Write(buffer, 0, buffer.Length);
+
+            status = new CryptoStatus(readStream.Position, readStream.Length, CryptoUtils.BlockSize);
+            progress.Report(status);
         }
 
         /// <summary>
@@ -417,217 +336,44 @@ namespace Kuznyechik
             IProgress<CryptoStatus> progress = default,
             CancellationToken cancellationToken = default)
         {
-            long byteLength = readStream.Length - readStream.Position;
-            long byteLengthLoss = byteLength;
-
             progress ??= new Progress<CryptoStatus>();
 
-            using (MemoryBuffer1D<Block, Stride1D.Dense> keysBuffer =
-                this.accelerator.Allocate1D(this.parameters.Keys))
-            using (MemoryBuffer1D<Block, Stride1D.Dense> linearTransformationBuffer =
-                this.accelerator.Allocate1D(new Block[] { this.parameters.LinearTransformation }))
-            using (MemoryBuffer1D<byte, Stride1D.Dense> replaceBytesBuffer =
-                this.accelerator.Allocate1D(this.parameters.ReverseReplaceBytesArr))
-            using (MemoryBuffer1D<GaloisTable, Stride1D.Dense> galoisTableBuffer =
-                this.accelerator.Allocate1D<GaloisTable>(1))
+            long totalBytes = readStream.Length - readStream.Position;
+            long blockCount = totalBytes / CryptoUtils.BlockSize - 1;
+
+            Block block;
+            CryptoStatus status;
+
+            byte[] buffer = new byte[CryptoUtils.BlockSize];
+
+            for (; blockCount > 0; blockCount--)
             {
-                galoisTableBuffer.CopyFromCPU(new GaloisTable[] { this.parameters.GaloisTable });
+                cancellationToken.ThrowIfCancellationRequested();
 
-                KernelData kernelData = new KernelData()
-                {
-                    Keys = keysBuffer.View,
-                    LinearTransformation = linearTransformationBuffer.View.VariableView(0),
-                    ReplaceBytes = replaceBytesBuffer.View,
-                    GaloisTable = galoisTableBuffer.View.VariableView(0)
-                };
+                readStream.Read(buffer, 0, CryptoUtils.BlockSize);
 
-                Action<Index1D, KernelData> kernel =
-                    this.accelerator.LoadAutoGroupedStreamKernel((Action<Index1D, KernelData>)Kernel.Decrypt);
+                block = buffer;
+                CryptoUtils.DecryptBlock(ref block, this.parameters);
+                buffer = block;
 
-                using (MemoryBuffer1D<byte, Stride1D.Dense> dataBuffer =
-                    this.GetMaxBuffer(byteLengthLoss))
-                {
-                    for (; byteLengthLoss > dataBuffer.Length; byteLengthLoss -= dataBuffer.Length)
-                    {
-                        this.ProcessBuffer(dataBuffer,
-                        readStream,
-                        writeStream,
-                        kernel,
-                        kernelData,
-                        byteLength,
-                        byteLengthLoss,
-                        progress,
-                        cancellationToken);
-                    }
-                }
+                writeStream.Write(buffer, 0, buffer.Length);
 
-                using (MemoryBuffer1D<byte, Stride1D.Dense> dataBuffer =
-                    this.accelerator.Allocate1D<byte>(byteLengthLoss))
-                {
-                    kernelData.Data = dataBuffer.View.Cast<byte, Block>();
-
-                    this.ProcessBufferWithPadding(dataBuffer,
-                        readStream,
-                        writeStream,
-                        kernel,
-                        kernelData,
-                        byteLength,
-                        byteLengthLoss,
-                        progress,
-                        cancellationToken);
-                }
+                status = new CryptoStatus(readStream.Position, readStream.Length, CryptoUtils.BlockSize);
+                progress.Report(status);
             }
-        }
 
-        /// <summary>
-        /// Обработка буфера устройством.
-        /// </summary>
-        /// <param name="dataBuffer">Буфер устройства.</param>
-        /// <param name="readStream">Поток чтения данных.</param>
-        /// <param name="writeStream">Поток записи.</param>
-        /// <param name="kernel">Метод ядра.</param>
-        /// <param name="kernelData">Данные ядра.</param>
-        /// <param name="byteLength">Длинна данных.</param>
-        /// <param name="byteLengthLoss">Остаток данных.</param>
-        /// <param name="progress">Прогресс.</param>
-        /// <param name="cancellationToken">Токен отмены.</param>
-        private void ProcessBuffer(MemoryBuffer1D<byte, Stride1D.Dense> dataBuffer,
-            Stream readStream,
-            Stream writeStream,
-            Action<Index1D, KernelData> kernel,
-            KernelData kernelData,
-            long byteLength,
-            long byteLengthLoss,
-            IProgress<CryptoStatus> progress,
-            CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
+            readStream.Read(buffer, 0, CryptoUtils.BlockSize);
 
-            Index1D index = new Index1D((int)(dataBuffer.Length / CryptoUtils.BlockSize));
+            block = buffer;
+            CryptoUtils.DecryptBlock(ref block, this.parameters);
+            buffer = block;
 
-            this.CopyFromCPU(readStream, dataBuffer, 104857600);
+            byte paddingLength = buffer[^1];
 
-            kernel(index, kernelData);
-            this.accelerator.Synchronize();
+            writeStream.Write(buffer, 0, CryptoUtils.BlockSize - paddingLength);
 
-            this.CopyToCPU(writeStream, dataBuffer, 104857600);
-
-            CryptoStatus status = new CryptoStatus(byteLength - byteLengthLoss, byteLength, dataBuffer.Length);
+            status = new CryptoStatus(readStream.Position, readStream.Length, CryptoUtils.BlockSize);
             progress.Report(status);
-        }
-
-        /// <summary>
-        /// Обработка буфера устройством с дополнением.
-        /// </summary>
-        /// <param name="dataBuffer">Буфер устройства.</param>
-        /// <param name="readStream">Поток чтения данных.</param>
-        /// <param name="writeStream">Поток записи.</param>
-        /// <param name="kernel">Метод ядра.</param>
-        /// <param name="kernelData">Данные ядра.</param>
-        /// <param name="byteLength">Длинна данных.</param>
-        /// <param name="byteLengthLoss">Остаток данных.</param>
-        /// <param name="progress">Прогресс.</param>
-        /// <param name="cancellationToken">Токен отмены.</param>
-        private void ProcessBufferWithPadding(MemoryBuffer1D<byte, Stride1D.Dense> dataBuffer,
-            Stream readStream,
-            Stream writeStream,
-            Action<Index1D, KernelData> kernel,
-            KernelData kernelData,
-            long byteLength,
-            long byteLengthLoss,
-            IProgress<CryptoStatus> progress,
-            CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            
-            Index1D index = new Index1D((int)(dataBuffer.Length / CryptoUtils.BlockSize));
-
-            this.CopyFromCPU(readStream, dataBuffer, 104857600);
-
-            kernel(index, kernelData);
-            this.accelerator.Synchronize();
-
-            byte[] paddingCount = new byte[1];
-            dataBuffer.View.SubView(dataBuffer.Length - 1, 1).CopyToCPU(paddingCount);
-            int padding = paddingCount[0];
-
-            if (padding > CryptoUtils.BlockSize)
-            {
-                throw new ArgumentException("Некорректный размер дополнения. Данные могут быть повреждены.");
-            }
-
-            this.CopyToCPU(writeStream, dataBuffer, 104857600, padding);
-
-            CryptoStatus status = new CryptoStatus(byteLength - byteLengthLoss, byteLength, dataBuffer.Length);
-            progress.Report(status);
-        }
-
-        /// <summary>
-        /// Копирование данных на устройство.
-        /// </summary>
-        /// <param name="readStream">Поток чтения данных.</param>
-        /// <param name="gpuData">Выделенная память на устройстве.</param>
-        /// <param name="bufferLength">Размер буфера.</param>
-        private void CopyFromCPU(Stream readStream, ArrayView1D<byte, Stride1D.Dense> gpuData, int bufferLength)
-        {
-            byte[] buffer = new byte[bufferLength];
-
-            for (long offset = 0; offset < gpuData.Length;)
-            {
-                ArrayView<byte> dataPart = gpuData.SubView(offset, Math.Min(bufferLength, gpuData.Length - offset));
-                int readBytes = readStream.Read(buffer, 0, dataPart.IntLength);
-                ReadOnlySpan<byte> span = buffer.AsSpan(0, readBytes);
-
-                dataPart.CopyFromCPU(span);
-                offset += dataPart.Length;
-            }
-        }
-
-        /// <summary>
-        /// Копирование данных с устройства.
-        /// </summary>
-        /// <param name="writeStream">Поток записи.</param>
-        /// <param name="gpuData">Выделенная память на устройстве.</param>
-        /// <param name="bufferLength">Размер буфера.</param>
-        /// <param name="paddingLength">Размер дополнения.</param>
-        private void CopyToCPU(Stream writeStream, MemoryBuffer1D<byte, Stride1D.Dense> gpuData, int bufferLength, int paddingLength = 0)
-        {
-            byte[] buffer = new byte[bufferLength];
-            long gpuLength = gpuData.Length - paddingLength;
-
-            for (long offset = 0; offset < gpuLength;)
-            {
-                ArrayView<byte> dataPart = gpuData.View.SubView(offset, Math.Min(bufferLength, gpuLength - offset));
-                Span<byte> span = buffer.AsSpan(0, dataPart.IntLength);
-
-                dataPart.CopyToCPU(span);
-                writeStream.Write(span);
-
-                offset += dataPart.Length;
-            }
-        }
-
-        /// <summary>
-        /// Получение буфера макимального размера.
-        /// </summary>
-        /// <param name="initSize">Количество блоков.</param>
-        /// <returns>Буфер максимального размера.</returns>
-        /// <exception cref="ArgumentException"></exception>
-        /// <exception cref="OutOfMemoryException"></exception>
-        private MemoryBuffer1D<byte, Stride1D.Dense> GetMaxBuffer(long initSize)
-        {
-            initSize = Math.Min(initSize, (long)(this.device.MemorySize * 0.8));
-
-            for (; initSize >= CryptoUtils.BlockSize; initSize = (long)(initSize * 0.8))
-            {
-                try
-                {
-                    return this.accelerator.Allocate1D<byte>(initSize);
-                }
-                catch (Exception) { }
-            }
-            
-            throw new OutOfMemoryException("Недостаточно памяти даже для минимального буфера.");
         }
     }
 }

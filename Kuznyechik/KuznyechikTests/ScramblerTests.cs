@@ -1,7 +1,5 @@
-﻿using ILGPU.Runtime;
-using Kuznyechik;
+﻿using Kuznyechik;
 using System;
-using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -223,40 +221,6 @@ namespace KuznyechikTests
 
                 Assert.IsTrue(true);
             }
-        }
-
-        [TestMethod("Вывод устройств")]
-        public void WriteDevice()
-        {
-            byte[] key = new byte[32];
-
-            {
-                Random random = new Random();
-                random.NextBytes(key);
-            }
-
-            using (Scrambler scrambler = new Scrambler(key))
-            {
-                Console.WriteLine("Текущее устройство:");
-                Console.WriteLine(scrambler.Device);
-                Console.WriteLine();
-                Console.WriteLine("Все устройства:");
-
-                ImmutableArray<Device> devices = scrambler.GetDevices();
-
-                foreach (Device device in devices)
-                {
-                    Console.WriteLine(device);
-                }
-
-                scrambler.Device = devices[1];
-
-                Console.WriteLine();
-                Console.WriteLine("Новое устройство:");
-                Console.WriteLine(scrambler.Device);
-            }
-
-            Assert.IsTrue(true);
         }
     }
 }

@@ -1,4 +1,6 @@
-﻿namespace Kuznyechik
+﻿using System;
+
+namespace Kuznyechik
 {
     /// <summary>
     /// Методы преобразования данных при шифровании.
@@ -24,19 +26,19 @@
         /// Шифрование блока.
         /// </summary>
         /// <param name="block">Блок.</param>
-        /// <param name="data">Данные.</param>
-        internal static void EncryptBlock(ref Block block, ref KernelData data)
+        /// <param name="parameters">Параметры.</param>
+        internal static void EncryptBlock(ref Block block, in CryptoParameters parameters)
         {
             for (int i = 0; i < 9; i++)
             {
-                ref Block key = ref data.Keys[i];
+                ref Block key = ref parameters.Keys[i];
 
                 block ^= key;
-                ReplaceBytes(ref block, ref data);
-                MultiTransformEncrypt(ref block, ref data);
+                ReplaceBytes(ref block, parameters.ReplaceBytes);
+                MultiTransformEncrypt(ref block, parameters);
             }
 
-            ref Block finalKey = ref data.Keys[9];
+            ref Block finalKey = ref parameters.Keys[9];
             block ^= finalKey;
         }
 
@@ -44,18 +46,18 @@
         /// Расшифрование блока.
         /// </summary>
         /// <param name="block">Блок.</param>
-        /// <param name="data">Данные.</param>
-        internal static void DecryptBlock(ref Block block, ref KernelData data)
+        /// <param name="parameters">Параметры.</param>
+        internal static void DecryptBlock(ref Block block, in CryptoParameters parameters)
         {
-            ref Block firstKey = ref data.Keys[9];
+            ref Block firstKey = ref parameters.Keys[9];
             block ^= firstKey;
 
             for (int i = 8; i >= 0; i--)
             {
-                Block key = data.Keys[i];
+                Block key = parameters.Keys[i];
 
-                MultiTransformDecrypt(ref block, ref data);
-                ReplaceBytes(ref block, ref data);
+                MultiTransformDecrypt(ref block, parameters);
+                ReplaceBytes(ref block, parameters.ReverseReplaceBytes);
                 block ^= key;
             }
         }
@@ -64,8 +66,8 @@
         /// Замена байт блока на байты из указанной таблицы.
         /// </summary>
         /// <param name="block">Блок данных.</param>
-        /// <param name="data">Данные.</param>
-        private static unsafe void ReplaceBytes(ref Block block, ref KernelData data)
+        /// <param name="replaceBytes">таблица для нелинейного преобразования.</param>
+        private static unsafe void ReplaceBytes(ref Block block, in ReadOnlySpan<byte> replaceBytes)
         {
             fixed (Block* ptr = &block)
             {
@@ -74,7 +76,7 @@
 
                 while (current < end)
                 {
-                    *current = data.ReplaceBytes[*current];
+                    *current = replaceBytes[*current];
                     current++;
                 }
             }
@@ -84,35 +86,24 @@
         /// Трансформация блока.
         /// </summary>
         /// <param name="block">Блок.</param>
-        /// <param name="data">Данные.</param>
-        private static unsafe void TransformBlock(ref Block block, ref KernelData data)
+        /// <param name="parameters">Параметры.</param>
+        private static unsafe void TransformBlock(ref Block block, in CryptoParameters parameters)
         {
-            ref GaloisTable galoisTable = ref data.GaloisTable.Value;
-            ref Block linearTransformation = ref data.LinearTransformation.Value;
+            ref readonly GaloisTable galoisTable = ref parameters.GaloisTable;
+            ref readonly Block linearTransformation = ref parameters.LinearTransformation;
 
             fixed (Block* ptr = &block)
             {
-                byte* current = (byte*)ptr;
-                byte* end = current + BlockSize - 1;
+                byte* blockPtr = (byte*)ptr;
+                byte sum = galoisTable[blockPtr[0], linearTransformation[0]];
 
-                byte sum = galoisTable[*current, linearTransformation[0]];
-                current++;
-
-                byte index = 1;
-
-                while (current < end)
+                for (int i = 1; i < BlockSize; i++)
                 {
-                    current[-1] = *current;
-                    sum ^= galoisTable[*current, linearTransformation[index]];
-
-                    current++;
-                    index++;
+                    blockPtr[i - 1] = blockPtr[i];
+                    sum ^= galoisTable[blockPtr[i], linearTransformation[i]];
                 }
 
-                current[-1] = *current;
-                sum ^= galoisTable[*current, linearTransformation[index]];
-
-                *current = sum;
+                blockPtr[15] = sum;
             }
         }
 
@@ -120,26 +111,25 @@
         /// Обратная трансформация блока.
         /// </summary>
         /// <param name="block">Блок.</param>
-        /// <param name="data">Данные.</param>
-        private static unsafe void ReverseTransformBlock(ref Block block, ref KernelData data)
+        /// <param name="parameters">Параметры.</param>
+        private static unsafe void ReverseTransformBlock(ref Block block, in CryptoParameters parameters)
         {
-            ref GaloisTable galoisTable = ref data.GaloisTable.Value;
-            ref Block linearTransformation = ref data.LinearTransformation.Value;
+            ref readonly GaloisTable galoisTable = ref parameters.GaloisTable;
+            ref readonly Block linearTransformation = ref parameters.LinearTransformation;
 
             fixed (Block* ptr = &block)
             {
-                byte* current = (byte*)(ptr + BlockSize - 1);
-                byte sum = *current;
+                byte* bytes = (byte*)ptr;
+                byte sum = bytes[15];
 
+                // Обратный порядок: от 15 до 1
                 for (int i = BlockSize - 1; i > 0; i--)
                 {
-                    *current = current[-1];
-                    sum ^= galoisTable[*current, linearTransformation[i]];
-
-                    current--;
+                    bytes[i] = bytes[i - 1];
+                    sum ^= galoisTable[bytes[i], linearTransformation[i]];
                 }
 
-                *current = sum;
+                bytes[0] = sum;
             }
         }
 
@@ -147,12 +137,12 @@
         /// Шифрование блока.
         /// </summary>
         /// <param name="block">Блок.</param>
-        /// <param name="data">Данные.</param>
-        private static void MultiTransformEncrypt(ref Block block, ref KernelData data)
+        /// <param name="parameters">Параметры.</param>
+        private static void MultiTransformEncrypt(ref Block block, in CryptoParameters parameters)
         {
             for (int i = 0; i < BlockSize; i++)
             {
-                TransformBlock(ref block, ref data);
+                TransformBlock(ref block, parameters);
             }
         }
 
@@ -160,12 +150,12 @@
         /// Расшифрование блока.
         /// </summary>
         /// <param name="block">Блок.</param>
-        /// <param name="data">Данные.</param>
-        private static void MultiTransformDecrypt(ref Block block, ref KernelData data)
+        /// <param name="parameters">Параметры.</param>
+        private static void MultiTransformDecrypt(ref Block block, in CryptoParameters parameters)
         {
             for (int i = 0; i < BlockSize; i++)
             {
-                ReverseTransformBlock(ref block, ref data);
+                ReverseTransformBlock(ref block, parameters);
             }
         }
     }
