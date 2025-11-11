@@ -219,30 +219,8 @@ namespace Kuznyechik
         /// <exception cref="IndexOutOfRangeException"></exception>
         public byte this[int index]
         {
-            get
-            {
-                if ((uint)index >= CryptoUtils.BlockSize)
-                {
-                    throw new IndexOutOfRangeException();
-                }
-
-                fixed (byte* ptr = this.bytes)
-                {
-                    return ptr[index];
-                }
-            }
-            set
-            {
-                if ((uint)index >= CryptoUtils.BlockSize)
-                {
-                    throw new IndexOutOfRangeException();
-                }
-
-                fixed (byte* ptr = this.bytes)
-                {
-                    ptr[index] = value;
-                }
-            }
+            get => this.bytes[index]; 
+            set => this.bytes[index] = value;
         }
     }
 }

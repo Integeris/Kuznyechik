@@ -83,20 +83,7 @@ namespace Kuznyechik
         /// <returns>Результат умножения.</returns>
         public readonly byte this[byte x, byte y]
         {
-            get
-            {
-                fixed (byte* ptr = this.data)
-                {
-                    return ptr[x * 256 + y];
-                }
-            }
-            set
-            {
-                fixed (byte* ptr = this.data)
-                {
-                    ptr[x * 256 + y] = value;
-                }
-            }
+            get => this.data[x * 256 + y];
         }
 
         /// <summary>

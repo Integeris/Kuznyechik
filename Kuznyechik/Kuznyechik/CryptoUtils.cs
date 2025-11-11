@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 
 namespace Kuznyechik
 {
@@ -31,17 +32,19 @@ namespace Kuznyechik
         /// <param name="parameters">Параметры.</param>
         internal static void EncryptBlock(ref Block block, in CryptoParameters parameters)
         {
-            for (int i = 0; i < 9; i++)
-            {
-                ref Block key = ref parameters.Keys[i];
+            Block[] keys = parameters.Keys;
 
-                block ^= key;
-                ReplaceBytes(ref block, parameters.ReplaceBytes);
-                MultiTransformEncrypt(ref block, parameters);
-            }
+            EncryptBlockInline(ref block, ref keys[0], parameters);
+            EncryptBlockInline(ref block, ref keys[1], parameters);
+            EncryptBlockInline(ref block, ref keys[2], parameters);
+            EncryptBlockInline(ref block, ref keys[3], parameters);
+            EncryptBlockInline(ref block, ref keys[4], parameters);
+            EncryptBlockInline(ref block, ref keys[5], parameters);
+            EncryptBlockInline(ref block, ref keys[6], parameters);
+            EncryptBlockInline(ref block, ref keys[7], parameters);
+            EncryptBlockInline(ref block, ref keys[8], parameters);
 
-            ref Block finalKey = ref parameters.Keys[9];
-            block ^= finalKey;
+            block ^= keys[9];
         }
 
         /// <summary>
@@ -51,17 +54,53 @@ namespace Kuznyechik
         /// <param name="parameters">Параметры.</param>
         internal static void DecryptBlock(ref Block block, in CryptoParameters parameters)
         {
-            ref Block firstKey = ref parameters.Keys[9];
-            block ^= firstKey;
+            Block[] keys = parameters.Keys;
 
-            for (int i = 8; i >= 0; i--)
-            {
-                Block key = parameters.Keys[i];
+            block ^= keys[9];
 
-                MultiTransformDecrypt(ref block, parameters);
-                ReplaceBytes(ref block, parameters.ReverseReplaceBytes);
-                block ^= key;
-            }
+            DecryptBlockInline(ref block, ref keys[8], parameters);
+            DecryptBlockInline(ref block, ref keys[7], parameters);
+            DecryptBlockInline(ref block, ref keys[6], parameters);
+            DecryptBlockInline(ref block, ref keys[5], parameters);
+            DecryptBlockInline(ref block, ref keys[4], parameters);
+            DecryptBlockInline(ref block, ref keys[3], parameters);
+            DecryptBlockInline(ref block, ref keys[2], parameters);
+            DecryptBlockInline(ref block, ref keys[1], parameters);
+            DecryptBlockInline(ref block, ref keys[0], parameters);
+        }
+        
+        /// <summary>
+        /// Вспомогательный метод для шифрования.
+        /// </summary>
+        /// <param name="block">Шифруемый блок.</param>
+        /// <param name="key">Ключ.</param>
+        /// <param name="parameters">Параметры.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void EncryptBlockInline(
+            ref Block block, 
+            ref Block key,
+            in CryptoParameters parameters)
+        {
+            block ^= key;
+            ReplaceBytes(ref block, parameters.ReplaceBytes);
+            MultiTransformEncrypt(ref block, parameters);
+        }
+
+        /// <summary>
+        /// Вспомогательный метод для расшифровывания.
+        /// </summary>
+        /// <param name="block">Расшифруемый блок.</param>
+        /// <param name="key">Ключ.</param>
+        /// <param name="parameters">Параметры.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void DecryptBlockInline(
+            ref Block block,
+            ref Block key,
+            in CryptoParameters parameters)
+        {
+            MultiTransformDecrypt(ref block, parameters);
+            ReplaceBytes(ref block, parameters.ReverseReplaceBytes);
+            block ^= key;
         }
 
         /// <summary>
@@ -71,20 +110,22 @@ namespace Kuznyechik
         /// <param name="replaceBytes">таблица для нелинейного преобразования.</param>
         private static unsafe void ReplaceBytes(ref Block block, in ReadOnlySpan<byte> replaceBytes)
         {
-            ref byte replaceBase = ref MemoryMarshal.GetReference(replaceBytes);
-
-            fixed (Block* ptr = &block)
-            fixed (byte* replacePtr = &replaceBase)
-            {
-                byte* current = (byte*)ptr;
-                byte* end = current + BlockSize;
-
-                while (current < end)
-                {
-                    *current = replacePtr[*current];
-                    current++;
-                }
-            }
+            block[0] = replaceBytes[block[0]];
+            block[1] = replaceBytes[block[1]];
+            block[2] = replaceBytes[block[2]];
+            block[3] = replaceBytes[block[3]];
+            block[4] = replaceBytes[block[4]];
+            block[5] = replaceBytes[block[5]];
+            block[6] = replaceBytes[block[6]];
+            block[7] = replaceBytes[block[7]];
+            block[8] = replaceBytes[block[8]];
+            block[9] = replaceBytes[block[9]];
+            block[10] = replaceBytes[block[10]];
+            block[11] = replaceBytes[block[11]];
+            block[12] = replaceBytes[block[12]];
+            block[13] = replaceBytes[block[13]];
+            block[14] = replaceBytes[block[14]];
+            block[15] = replaceBytes[block[15]];
         }
 
         /// <summary>
@@ -95,28 +136,30 @@ namespace Kuznyechik
         private static unsafe void TransformBlock(ref Block block, in CryptoParameters parameters)
         {
             ref readonly GaloisTable galoisTable = ref parameters.GaloisTable;
-            ref readonly Block linearTransformation = ref parameters.LinearTransformation;
 
             fixed (Block* ptr = &block)
+            fixed (Block* linearTransformationBlock = &parameters.LinearTransformation)
             {
                 byte* blockPtr = (byte*)ptr;
-                byte sum = galoisTable[blockPtr[0], linearTransformation[0]];
+                byte* linearTransformationBlockPtr = (byte*)linearTransformationBlock;
 
-                sum ^= galoisTable[blockPtr[1], linearTransformation[1]];
-                sum ^= galoisTable[blockPtr[2], linearTransformation[2]];
-                sum ^= galoisTable[blockPtr[3], linearTransformation[3]];
-                sum ^= galoisTable[blockPtr[4], linearTransformation[4]];
-                sum ^= galoisTable[blockPtr[5], linearTransformation[5]];
-                sum ^= galoisTable[blockPtr[6], linearTransformation[6]];
-                sum ^= galoisTable[blockPtr[7], linearTransformation[7]];
-                sum ^= galoisTable[blockPtr[8], linearTransformation[8]];
-                sum ^= galoisTable[blockPtr[9], linearTransformation[9]];
-                sum ^= galoisTable[blockPtr[10], linearTransformation[10]];
-                sum ^= galoisTable[blockPtr[11], linearTransformation[11]];
-                sum ^= galoisTable[blockPtr[12], linearTransformation[12]];
-                sum ^= galoisTable[blockPtr[13], linearTransformation[13]];
-                sum ^= galoisTable[blockPtr[14], linearTransformation[14]];
-                sum ^= galoisTable[blockPtr[15], linearTransformation[15]];
+                byte sum = galoisTable[blockPtr[0], linearTransformationBlockPtr[0]];
+
+                sum ^= galoisTable[blockPtr[1], linearTransformationBlockPtr[1]];
+                sum ^= galoisTable[blockPtr[2], linearTransformationBlockPtr[2]];
+                sum ^= galoisTable[blockPtr[3], linearTransformationBlockPtr[3]];
+                sum ^= galoisTable[blockPtr[4], linearTransformationBlockPtr[4]];
+                sum ^= galoisTable[blockPtr[5], linearTransformationBlockPtr[5]];
+                sum ^= galoisTable[blockPtr[6], linearTransformationBlockPtr[6]];
+                sum ^= galoisTable[blockPtr[7], linearTransformationBlockPtr[7]];
+                sum ^= galoisTable[blockPtr[8], linearTransformationBlockPtr[8]];
+                sum ^= galoisTable[blockPtr[9], linearTransformationBlockPtr[9]];
+                sum ^= galoisTable[blockPtr[10], linearTransformationBlockPtr[10]];
+                sum ^= galoisTable[blockPtr[11], linearTransformationBlockPtr[11]];
+                sum ^= galoisTable[blockPtr[12], linearTransformationBlockPtr[12]];
+                sum ^= galoisTable[blockPtr[13], linearTransformationBlockPtr[13]];
+                sum ^= galoisTable[blockPtr[14], linearTransformationBlockPtr[14]];
+                sum ^= galoisTable[blockPtr[15], linearTransformationBlockPtr[15]];
 
 
                 Unsafe.CopyBlock(blockPtr, blockPtr + 1, BlockSize - 1);
@@ -135,27 +178,29 @@ namespace Kuznyechik
             ref readonly Block linearTransformation = ref parameters.LinearTransformation;
 
             fixed (Block* ptr = &block)
+            fixed (Block* linearTransformationBlock = &parameters.LinearTransformation)
             {
                 byte* blockPtr = (byte*)ptr;
+                byte* linearTransformationBlockPtr = (byte*)linearTransformationBlock;
 
                 byte sum = blockPtr[15];
                 Unsafe.CopyBlock(blockPtr + 1, blockPtr, BlockSize - 1);
 
-                sum ^= galoisTable[blockPtr[15], linearTransformation[15]];
-                sum ^= galoisTable[blockPtr[14], linearTransformation[14]];
-                sum ^= galoisTable[blockPtr[13], linearTransformation[13]];
-                sum ^= galoisTable[blockPtr[12], linearTransformation[12]];
-                sum ^= galoisTable[blockPtr[11], linearTransformation[11]];
-                sum ^= galoisTable[blockPtr[10], linearTransformation[10]];
-                sum ^= galoisTable[blockPtr[9], linearTransformation[9]];
-                sum ^= galoisTable[blockPtr[8], linearTransformation[8]];
-                sum ^= galoisTable[blockPtr[7], linearTransformation[7]];
-                sum ^= galoisTable[blockPtr[6], linearTransformation[6]];
-                sum ^= galoisTable[blockPtr[5], linearTransformation[5]];
-                sum ^= galoisTable[blockPtr[4], linearTransformation[4]];
-                sum ^= galoisTable[blockPtr[3], linearTransformation[3]];
-                sum ^= galoisTable[blockPtr[2], linearTransformation[2]];
-                sum ^= galoisTable[blockPtr[1], linearTransformation[1]];
+                sum ^= galoisTable[blockPtr[15], linearTransformationBlockPtr[15]];
+                sum ^= galoisTable[blockPtr[14], linearTransformationBlockPtr[14]];
+                sum ^= galoisTable[blockPtr[13], linearTransformationBlockPtr[13]];
+                sum ^= galoisTable[blockPtr[12], linearTransformationBlockPtr[12]];
+                sum ^= galoisTable[blockPtr[11], linearTransformationBlockPtr[11]];
+                sum ^= galoisTable[blockPtr[10], linearTransformationBlockPtr[10]];
+                sum ^= galoisTable[blockPtr[9], linearTransformationBlockPtr[9]];
+                sum ^= galoisTable[blockPtr[8], linearTransformationBlockPtr[8]];
+                sum ^= galoisTable[blockPtr[7], linearTransformationBlockPtr[7]];
+                sum ^= galoisTable[blockPtr[6], linearTransformationBlockPtr[6]];
+                sum ^= galoisTable[blockPtr[5], linearTransformationBlockPtr[5]];
+                sum ^= galoisTable[blockPtr[4], linearTransformationBlockPtr[4]];
+                sum ^= galoisTable[blockPtr[3], linearTransformationBlockPtr[3]];
+                sum ^= galoisTable[blockPtr[2], linearTransformationBlockPtr[2]];
+                sum ^= galoisTable[blockPtr[1], linearTransformationBlockPtr[1]];
 
                 blockPtr[0] = sum;
             }
