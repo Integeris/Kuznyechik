@@ -68,6 +68,8 @@ namespace KuznyechikTests
         }
 
         [TestMethod("Шифрование и дешифрование большого объёма данных")]
+        [DataRow(160000, DisplayName = "160000 байт")]
+        [DataRow(16000000, DisplayName = "16000000 байт")]
         [DataRow(201326592, DisplayName = "201326592 байт")]
         [DataRow(402653184, DisplayName = "402653184 байт")]
         [DataRow(805306368, DisplayName = "805306368 байт")]
