@@ -68,7 +68,57 @@ namespace Kuznyechik
             DecryptBlockInline(ref block, ref keys[1], parameters);
             DecryptBlockInline(ref block, ref keys[0], parameters);
         }
-        
+
+        /// <summary>
+        /// Замена байт блока на байты из указанной таблицы.
+        /// </summary>
+        /// <param name="block">Блок данных.</param>
+        /// <param name="replaceBytes">таблица для нелинейного преобразования.</param>
+        internal static unsafe void ReplaceBytes(ref Block block, in ReadOnlySpan<byte> replaceBytes)
+        {
+            block[0] = replaceBytes[block[0]];
+            block[1] = replaceBytes[block[1]];
+            block[2] = replaceBytes[block[2]];
+            block[3] = replaceBytes[block[3]];
+            block[4] = replaceBytes[block[4]];
+            block[5] = replaceBytes[block[5]];
+            block[6] = replaceBytes[block[6]];
+            block[7] = replaceBytes[block[7]];
+            block[8] = replaceBytes[block[8]];
+            block[9] = replaceBytes[block[9]];
+            block[10] = replaceBytes[block[10]];
+            block[11] = replaceBytes[block[11]];
+            block[12] = replaceBytes[block[12]];
+            block[13] = replaceBytes[block[13]];
+            block[14] = replaceBytes[block[14]];
+            block[15] = replaceBytes[block[15]];
+        }
+
+        /// <summary>
+        /// Шифрование блока.
+        /// </summary>
+        /// <param name="block">Блок.</param>
+        /// <param name="parameters">Параметры.</param>
+        internal static void MultiTransformEncrypt(ref Block block, in CryptoParameters parameters)
+        {
+            TransformBlock(ref block, parameters);
+            TransformBlock(ref block, parameters);
+            TransformBlock(ref block, parameters);
+            TransformBlock(ref block, parameters);
+            TransformBlock(ref block, parameters);
+            TransformBlock(ref block, parameters);
+            TransformBlock(ref block, parameters);
+            TransformBlock(ref block, parameters);
+            TransformBlock(ref block, parameters);
+            TransformBlock(ref block, parameters);
+            TransformBlock(ref block, parameters);
+            TransformBlock(ref block, parameters);
+            TransformBlock(ref block, parameters);
+            TransformBlock(ref block, parameters);
+            TransformBlock(ref block, parameters);
+            TransformBlock(ref block, parameters);
+        }
+
         /// <summary>
         /// Вспомогательный метод для шифрования.
         /// </summary>
@@ -101,31 +151,6 @@ namespace Kuznyechik
             MultiTransformDecrypt(ref block, parameters);
             ReplaceBytes(ref block, parameters.ReverseReplaceBytes);
             block ^= key;
-        }
-
-        /// <summary>
-        /// Замена байт блока на байты из указанной таблицы.
-        /// </summary>
-        /// <param name="block">Блок данных.</param>
-        /// <param name="replaceBytes">таблица для нелинейного преобразования.</param>
-        private static unsafe void ReplaceBytes(ref Block block, in ReadOnlySpan<byte> replaceBytes)
-        {
-            block[0] = replaceBytes[block[0]];
-            block[1] = replaceBytes[block[1]];
-            block[2] = replaceBytes[block[2]];
-            block[3] = replaceBytes[block[3]];
-            block[4] = replaceBytes[block[4]];
-            block[5] = replaceBytes[block[5]];
-            block[6] = replaceBytes[block[6]];
-            block[7] = replaceBytes[block[7]];
-            block[8] = replaceBytes[block[8]];
-            block[9] = replaceBytes[block[9]];
-            block[10] = replaceBytes[block[10]];
-            block[11] = replaceBytes[block[11]];
-            block[12] = replaceBytes[block[12]];
-            block[13] = replaceBytes[block[13]];
-            block[14] = replaceBytes[block[14]];
-            block[15] = replaceBytes[block[15]];
         }
 
         /// <summary>
@@ -204,31 +229,6 @@ namespace Kuznyechik
 
                 blockPtr[0] = sum;
             }
-        }
-
-        /// <summary>
-        /// Шифрование блока.
-        /// </summary>
-        /// <param name="block">Блок.</param>
-        /// <param name="parameters">Параметры.</param>
-        private static void MultiTransformEncrypt(ref Block block, in CryptoParameters parameters)
-        {
-            TransformBlock(ref block, parameters);
-            TransformBlock(ref block, parameters);
-            TransformBlock(ref block, parameters);
-            TransformBlock(ref block, parameters);
-            TransformBlock(ref block, parameters);
-            TransformBlock(ref block, parameters);
-            TransformBlock(ref block, parameters);
-            TransformBlock(ref block, parameters);
-            TransformBlock(ref block, parameters);
-            TransformBlock(ref block, parameters);
-            TransformBlock(ref block, parameters);
-            TransformBlock(ref block, parameters);
-            TransformBlock(ref block, parameters);
-            TransformBlock(ref block, parameters);
-            TransformBlock(ref block, parameters);
-            TransformBlock(ref block, parameters);
         }
 
         /// <summary>

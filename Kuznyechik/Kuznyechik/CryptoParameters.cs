@@ -388,10 +388,14 @@ namespace Kuznyechik
 
                 int constantOffset = 8 * i;
 
-                for (int j = 0; j < 8; j++)
-                {
-                    this.FeistelCell(ref firstKey, ref secondKey, ref this.constants[constantOffset + j]);
-                }
+                this.FeistelCell(ref firstKey, ref secondKey, ref this.constants[constantOffset + 0]);
+                this.FeistelCell(ref firstKey, ref secondKey, ref this.constants[constantOffset + 1]);
+                this.FeistelCell(ref firstKey, ref secondKey, ref this.constants[constantOffset + 2]);
+                this.FeistelCell(ref firstKey, ref secondKey, ref this.constants[constantOffset + 3]);
+                this.FeistelCell(ref firstKey, ref secondKey, ref this.constants[constantOffset + 4]);
+                this.FeistelCell(ref firstKey, ref secondKey, ref this.constants[constantOffset + 5]);
+                this.FeistelCell(ref firstKey, ref secondKey, ref this.constants[constantOffset + 6]);
+                this.FeistelCell(ref firstKey, ref secondKey, ref this.constants[constantOffset + 7]);
             }
         }
 
@@ -405,77 +409,13 @@ namespace Kuznyechik
         {
             Block tmpKey = firstKey ^ constant;
 
-            this.ReplaceBlock(ref tmpKey);
-            this.MultiTransform(ref tmpKey);
+            CryptoUtils.ReplaceBytes(ref tmpKey, this.replaceBytes);
+            CryptoUtils.MultiTransformEncrypt(ref tmpKey, this);
 
             tmpKey ^= secondKey;
 
             secondKey = firstKey;
             firstKey = tmpKey;
-        }
-
-        /// <summary>
-        /// Замена байт блока на байты из указанной таблицы.
-        /// </summary>
-        /// <param name="block">Блок данных.</param>
-        private unsafe void ReplaceBlock(ref Block block)
-        {
-            fixed (Block* blockPtr = &block)
-            fixed (byte* replaceBytesPtr = this.replaceBytes)
-            {
-                byte* current = (byte*)blockPtr;
-                byte* end = current + CryptoUtils.BlockSize;
-
-                while (current < end)
-                {
-                    *current = replaceBytesPtr[*current];
-                    current++;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Шифрование блока.
-        /// </summary>
-        /// <param name="block">Блок.</param>
-        private void MultiTransform(ref Block block)
-        {
-            for (int i = 0; i < CryptoUtils.BlockSize; i++)
-            {
-                this.TransformBlock(ref block);
-            }
-        }
-
-        /// <summary>
-        /// Трансформация блока.
-        /// </summary>
-        /// <param name="block">Блок.</param>
-        private unsafe void TransformBlock(ref Block block)
-        {
-            fixed (Block* ptr = &block)
-            {
-                byte* current = (byte*)ptr;
-                byte* end = current + CryptoUtils.BlockSize - 1;
-
-                byte sum = this.galoisTable[*current, this.linearTransformation[0]];
-                current++;
-
-                byte index = 1;
-
-                while (current < end)
-                {
-                    current[-1] = *current;
-                    sum ^= this.galoisTable[*current, this.linearTransformation[index]];
-
-                    current++;
-                    index++;
-                }
-
-                current[-1] = *current;
-                sum ^= this.galoisTable[*current, this.linearTransformation[index]];
-
-                *current = sum;
-            }
         }
     }
 }
