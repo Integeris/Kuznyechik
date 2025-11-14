@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -64,22 +65,16 @@ namespace Kuznyechik
         public override readonly string ToString()
         {
             StringBuilder stringBuilder = new StringBuilder("[");
+            ReadOnlySpan<byte> span = this.AsReadOnlySpan();
 
-            fixed (byte* value = this.bytes)
+            stringBuilder.Append(span[0]);
+
+            for (int i = 1; i < span.Length; i++)
             {
-                byte* ptr = value;
-                byte* end = value + CryptoUtils.BlockSize - 1;
-
-                while (ptr < end)
-                {
-                    stringBuilder.Append(*ptr);
-                    stringBuilder.Append(", ");
-                    ptr++;
-                }
-
-                stringBuilder.Append(*ptr);
+                stringBuilder.Append(", ");
+                stringBuilder.Append(span[i]);
             }
-            
+
             stringBuilder.Append("]");
             return stringBuilder.ToString();
         }
@@ -90,10 +85,16 @@ namespace Kuznyechik
         /// <returns>Span байтов блока.</returns>
         public readonly unsafe Span<byte> AsSpan()
         {
-            fixed (byte* ptr = this.bytes)
-            {
-                return new Span<byte>(ptr, CryptoUtils.BlockSize);
-            }
+            return MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref Unsafe.AsRef(in this.low), 2));
+        }
+
+        /// <summary>
+        /// Получить блок как ReadOnlySpan.
+        /// </summary>
+        /// <returns>ReadOnlySpan байтов блока.</returns>
+        public readonly unsafe ReadOnlySpan<byte> AsReadOnlySpan()
+        {
+            return MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in this.low), 2));
         }
 
         /// <summary>
@@ -150,16 +151,7 @@ namespace Kuznyechik
                 throw new ArgumentException("Массив должен содержать 16 байт");
             }
 
-            fixed (byte* ptr = data)
-            {
-                Block block = new Block
-                {
-                    low = *(ulong*)ptr,
-                    high = *(ulong*)(ptr + sizeof(ulong))
-                };
-
-                return block;
-            }
+            return Unsafe.As<byte, Block>(ref MemoryMarshal.GetReference<byte>(data));
         }
 
         /// <summary>
@@ -173,16 +165,7 @@ namespace Kuznyechik
                 throw new ArgumentException("Массив должен содержать 16 байт");
             }
 
-            fixed (byte* ptr = &MemoryMarshal.GetReference(data))
-            {
-                Block block = new Block
-                {
-                    low = *(ulong*)ptr,
-                    high = *(ulong*)(ptr + sizeof(ulong))
-                };
-
-                return block;
-            }
+            return Unsafe.As<byte, Block>(ref MemoryMarshal.GetReference<byte>(data));
         }
 
         /// <summary>
@@ -201,13 +184,7 @@ namespace Kuznyechik
         public static implicit operator byte[](Block block)
         {
             byte[] result = new byte[CryptoUtils.BlockSize];
-
-            fixed (byte* ptr = result)
-            {
-                *(ulong*)ptr = block.low;
-                *(ulong*)(ptr + sizeof(ulong)) = block.high;
-            }
-
+            MemoryMarshal.Write(result, ref block.low);
             return result;
         }
 
