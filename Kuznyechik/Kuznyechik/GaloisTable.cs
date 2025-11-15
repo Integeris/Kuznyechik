@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Kuznyechik
@@ -19,11 +20,13 @@ namespace Kuznyechik
         /// </summary>
         public GaloisTable()
         {
+            ref byte dataRef = ref Unsafe.As<GaloisTable, byte>(ref this);
+
             for (int i = Byte.MinValue; i <= Byte.MaxValue; i++)
             {
                 for (int j = Byte.MinValue; j <= Byte.MaxValue; j++)
                 {
-                    this.data[i * 256 + j] = GaloisMultiplication((byte)i, (byte)j);
+                    this[(byte)i, (byte)j] = GaloisMultiplication((byte)i, (byte)j);
                 }
             }
         }
@@ -54,7 +57,7 @@ namespace Kuznyechik
             for (int i = 0; i < 8; i++)
             {
                 // Если младший бит ключа равен 1.
-                if ((key & 0b01) == 1)
+                if ((key & 1) != 0)
                 {
                     result ^= origin;
                 }
@@ -62,7 +65,7 @@ namespace Kuznyechik
                 key >>= 1;
 
                 // Вычисляем старший бит исходного байта.
-                byte higherBit = (byte)(origin & 0b10000000);
+                byte higherBit = (byte)(origin & 0x80);
                 origin <<= 1;
 
                 if (higherBit != 0)
@@ -83,7 +86,18 @@ namespace Kuznyechik
         /// <returns>Результат умножения.</returns>
         public readonly byte this[byte x, byte y]
         {
-            get => this.data[x * 256 + y];
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get
+            {
+                ref byte arrPtr = ref Unsafe.AsRef(this.data[0]);
+                return Unsafe.Add(ref arrPtr, x << 8 | y);
+            }
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            set
+            {
+                ref byte arrPtr = ref Unsafe.AsRef(this.data[x << 8 | y]);
+                arrPtr = value;
+            }
         }
 
         /// <summary>

@@ -113,26 +113,21 @@ namespace Kuznyechik
 
                 byte sum = galoisTable[blockPtr[0], linearTransformationBlockPtr[0]];
 
-                for (int i = 1; i < BlockSize; i++)
-                {
-                    sum ^= galoisTable[blockPtr[i], linearTransformationBlockPtr[i]];
-                }
-
-                //sum ^= galoisTable[blockPtr[1], linearTransformationBlockPtr[1]];
-                //sum ^= galoisTable[blockPtr[2], linearTransformationBlockPtr[2]];
-                //sum ^= galoisTable[blockPtr[3], linearTransformationBlockPtr[3]];
-                //sum ^= galoisTable[blockPtr[4], linearTransformationBlockPtr[4]];
-                //sum ^= galoisTable[blockPtr[5], linearTransformationBlockPtr[5]];
-                //sum ^= galoisTable[blockPtr[6], linearTransformationBlockPtr[6]];
-                //sum ^= galoisTable[blockPtr[7], linearTransformationBlockPtr[7]];
-                //sum ^= galoisTable[blockPtr[8], linearTransformationBlockPtr[8]];
-                //sum ^= galoisTable[blockPtr[9], linearTransformationBlockPtr[9]];
-                //sum ^= galoisTable[blockPtr[10], linearTransformationBlockPtr[10]];
-                //sum ^= galoisTable[blockPtr[11], linearTransformationBlockPtr[11]];
-                //sum ^= galoisTable[blockPtr[12], linearTransformationBlockPtr[12]];
-                //sum ^= galoisTable[blockPtr[13], linearTransformationBlockPtr[13]];
-                //sum ^= galoisTable[blockPtr[14], linearTransformationBlockPtr[14]];
-                //sum ^= galoisTable[blockPtr[15], linearTransformationBlockPtr[15]];
+                sum ^= galoisTable[blockPtr[1], linearTransformationBlockPtr[1]];
+                sum ^= galoisTable[blockPtr[2], linearTransformationBlockPtr[2]];
+                sum ^= galoisTable[blockPtr[3], linearTransformationBlockPtr[3]];
+                sum ^= galoisTable[blockPtr[4], linearTransformationBlockPtr[4]];
+                sum ^= galoisTable[blockPtr[5], linearTransformationBlockPtr[5]];
+                sum ^= galoisTable[blockPtr[6], linearTransformationBlockPtr[6]];
+                sum ^= galoisTable[blockPtr[7], linearTransformationBlockPtr[7]];
+                sum ^= galoisTable[blockPtr[8], linearTransformationBlockPtr[8]];
+                sum ^= galoisTable[blockPtr[9], linearTransformationBlockPtr[9]];
+                sum ^= galoisTable[blockPtr[10], linearTransformationBlockPtr[10]];
+                sum ^= galoisTable[blockPtr[11], linearTransformationBlockPtr[11]];
+                sum ^= galoisTable[blockPtr[12], linearTransformationBlockPtr[12]];
+                sum ^= galoisTable[blockPtr[13], linearTransformationBlockPtr[13]];
+                sum ^= galoisTable[blockPtr[14], linearTransformationBlockPtr[14]];
+                sum ^= galoisTable[blockPtr[15], linearTransformationBlockPtr[15]];
 
 
                 Unsafe.CopyBlock(blockPtr, blockPtr + 1, BlockSize - 1);
@@ -159,26 +154,21 @@ namespace Kuznyechik
                 byte sum = blockPtr[15];
                 Unsafe.CopyBlock(blockPtr + 1, blockPtr, BlockSize - 1);
 
-                for (int i = BlockSize - 1; i >= 1; i--)
-                {
-                    sum ^= galoisTable[blockPtr[i], linearTransformationBlockPtr[i]];
-                }
-
-                //sum ^= galoisTable[blockPtr[15], linearTransformationBlockPtr[15]];
-                //sum ^= galoisTable[blockPtr[14], linearTransformationBlockPtr[14]];
-                //sum ^= galoisTable[blockPtr[13], linearTransformationBlockPtr[13]];
-                //sum ^= galoisTable[blockPtr[12], linearTransformationBlockPtr[12]];
-                //sum ^= galoisTable[blockPtr[11], linearTransformationBlockPtr[11]];
-                //sum ^= galoisTable[blockPtr[10], linearTransformationBlockPtr[10]];
-                //sum ^= galoisTable[blockPtr[9], linearTransformationBlockPtr[9]];
-                //sum ^= galoisTable[blockPtr[8], linearTransformationBlockPtr[8]];
-                //sum ^= galoisTable[blockPtr[7], linearTransformationBlockPtr[7]];
-                //sum ^= galoisTable[blockPtr[6], linearTransformationBlockPtr[6]];
-                //sum ^= galoisTable[blockPtr[5], linearTransformationBlockPtr[5]];
-                //sum ^= galoisTable[blockPtr[4], linearTransformationBlockPtr[4]];
-                //sum ^= galoisTable[blockPtr[3], linearTransformationBlockPtr[3]];
-                //sum ^= galoisTable[blockPtr[2], linearTransformationBlockPtr[2]];
-                //sum ^= galoisTable[blockPtr[1], linearTransformationBlockPtr[1]];
+                sum ^= galoisTable[blockPtr[15], linearTransformationBlockPtr[15]];
+                sum ^= galoisTable[blockPtr[14], linearTransformationBlockPtr[14]];
+                sum ^= galoisTable[blockPtr[13], linearTransformationBlockPtr[13]];
+                sum ^= galoisTable[blockPtr[12], linearTransformationBlockPtr[12]];
+                sum ^= galoisTable[blockPtr[11], linearTransformationBlockPtr[11]];
+                sum ^= galoisTable[blockPtr[10], linearTransformationBlockPtr[10]];
+                sum ^= galoisTable[blockPtr[9], linearTransformationBlockPtr[9]];
+                sum ^= galoisTable[blockPtr[8], linearTransformationBlockPtr[8]];
+                sum ^= galoisTable[blockPtr[7], linearTransformationBlockPtr[7]];
+                sum ^= galoisTable[blockPtr[6], linearTransformationBlockPtr[6]];
+                sum ^= galoisTable[blockPtr[5], linearTransformationBlockPtr[5]];
+                sum ^= galoisTable[blockPtr[4], linearTransformationBlockPtr[4]];
+                sum ^= galoisTable[blockPtr[3], linearTransformationBlockPtr[3]];
+                sum ^= galoisTable[blockPtr[2], linearTransformationBlockPtr[2]];
+                sum ^= galoisTable[blockPtr[1], linearTransformationBlockPtr[1]];
 
                 blockPtr[0] = sum;
             }
