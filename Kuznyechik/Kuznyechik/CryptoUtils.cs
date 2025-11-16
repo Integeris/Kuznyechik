@@ -26,6 +26,13 @@ namespace Kuznyechik
         internal const byte RoundKeysLength = 10;
 
         /// <summary>
+        /// Делегат для вызова методов шифрования и расшифровывания.
+        /// </summary>
+        /// <param name="block">Блок.</param>
+        /// <param name="parameters">Параметры.</param>
+        internal delegate void CryptBlockDelegate(ref Block block, in CryptoParameters parameters);
+
+        /// <summary>
         /// Шифрование блока.
         /// </summary>
         /// <param name="block">Блок.</param>

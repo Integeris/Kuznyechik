@@ -1,9 +1,10 @@
 ﻿using System;
-using System.Collections.Immutable;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using static Kuznyechik.CryptoUtils;
 
 namespace Kuznyechik
 {
@@ -60,12 +61,9 @@ namespace Kuznyechik
         /// <exception cref="ArgumentException"></exception>
         public void Encrypt(ref byte[] arr)
         {
-            using (MemoryStream readStream = new MemoryStream())
+            using (MemoryStream readStream = new MemoryStream(arr, 0, arr.Length))
             using (MemoryStream writeStream = new MemoryStream())
             {
-                readStream.Write(arr, 0, arr.Length);
-                readStream.Position = 0;
-
                 this.Encrypt(readStream, writeStream);
                 arr = writeStream.ToArray();
             }
@@ -134,12 +132,9 @@ namespace Kuznyechik
         /// <exception cref="ArgumentException"></exception>
         public void Decrypt(ref byte[] arr)
         {
-            using (MemoryStream readStream = new MemoryStream())
+            using (MemoryStream readStream = new MemoryStream(arr, 0, arr.Length))
             using (MemoryStream writeStream = new MemoryStream())
             {
-                readStream.Write(arr, 0, arr.Length);
-                readStream.Position = 0;
-
                 this.Decrypt(readStream, writeStream);
                 arr = writeStream.ToArray();
             }
@@ -285,39 +280,49 @@ namespace Kuznyechik
         {
             progress ??= new Progress<CryptoStatus>();
 
+            const short bufferSize = 4096;
+            short bufferBlockSize = bufferSize / CryptoUtils.BlockSize;
             long totalBytes = readStream.Length - readStream.Position;
             long blockCount = totalBytes / CryptoUtils.BlockSize;
-            byte remainingBytes = (byte)(CryptoUtils.BlockSize - totalBytes % CryptoUtils.BlockSize);
+            long partCount = blockCount / bufferBlockSize;
+            int leftBlockCount = (int)(blockCount - partCount * bufferBlockSize);
 
-            CryptoStatus status;
+            byte paddingLength = (byte)(CryptoUtils.BlockSize - totalBytes % CryptoUtils.BlockSize);
 
-            Span<byte> buffer = stackalloc byte[CryptoUtils.BlockSize];
+            Span<byte> buffer = new byte[bufferSize];
 
-            for (; blockCount > 0; blockCount--)
+            for (; partCount > 0; partCount--)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                readStream.Read(buffer);
-
-                ref Block innerBlock = ref Unsafe.As<byte, Block>(ref buffer[0]);
-                CryptoUtils.EncryptBlock(ref innerBlock, this.parameters);
-
-                writeStream.Write(buffer);
-
-                status = new CryptoStatus(readStream.Position, readStream.Length, CryptoUtils.BlockSize);
-                progress.Report(status);
+                this.ProcessBuffer(
+                    readStream,
+                    writeStream,
+                    ref buffer,
+                    CryptoUtils.EncryptBlock,
+                    progress,
+                    cancellationToken);
             }
 
+            buffer = new byte[leftBlockCount * CryptoUtils.BlockSize];
+
+            this.ProcessBuffer(
+                readStream,
+                writeStream,
+                ref buffer,
+                CryptoUtils.EncryptBlock,
+                progress,
+                cancellationToken);
+
+            buffer = new byte[CryptoUtils.BlockSize];
             readStream.Read(buffer);
 
-            buffer[^1] = remainingBytes;
+            buffer[^1] = paddingLength;
 
             ref Block block = ref Unsafe.As<byte, Block>(ref buffer[0]);
             CryptoUtils.EncryptBlock(ref block, this.parameters);
 
             writeStream.Write(buffer);
 
-            status = new CryptoStatus(readStream.Position, readStream.Length, CryptoUtils.BlockSize);
+            CryptoStatus status = new CryptoStatus(readStream.Position, readStream.Length, CryptoUtils.BlockSize);
             progress.Report(status);
         }
 
@@ -336,28 +341,37 @@ namespace Kuznyechik
         {
             progress ??= new Progress<CryptoStatus>();
 
+            const short bufferSize = 4096;
+            short bufferBlockSize = bufferSize / CryptoUtils.BlockSize;
             long totalBytes = readStream.Length - readStream.Position;
             long blockCount = totalBytes / CryptoUtils.BlockSize - 1;
+            long partCount = blockCount / bufferBlockSize;
+            int leftBlockCount = (int)(blockCount - partCount * bufferBlockSize);
 
-            CryptoStatus status;
+            Span<byte> buffer = new byte[bufferSize];
 
-            Span<byte> buffer = stackalloc byte[CryptoUtils.BlockSize];
-
-            for (; blockCount > 0; blockCount--)
+            for (; partCount > 0; partCount--)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                readStream.Read(buffer);
-
-                ref Block innerBlock = ref Unsafe.As<byte, Block>(ref buffer[0]);
-                CryptoUtils.DecryptBlock(ref innerBlock, this.parameters);
-
-                writeStream.Write(buffer);
-
-                status = new CryptoStatus(readStream.Position, readStream.Length, CryptoUtils.BlockSize);
-                progress.Report(status);
+                this.ProcessBuffer(
+                    readStream,
+                    writeStream,
+                    ref buffer,
+                    CryptoUtils.DecryptBlock,
+                    progress,
+                    cancellationToken);
             }
 
+            buffer = new byte[leftBlockCount * CryptoUtils.BlockSize];
+
+            this.ProcessBuffer(
+                readStream,
+                writeStream,
+                ref buffer,
+                CryptoUtils.DecryptBlock,
+                progress,
+                cancellationToken);
+
+            buffer = new byte[CryptoUtils.BlockSize];
             readStream.Read(buffer);
 
             ref Block block = ref Unsafe.As<byte, Block>(ref buffer[0]);
@@ -367,7 +381,41 @@ namespace Kuznyechik
 
             writeStream.Write(buffer[..(CryptoUtils.BlockSize - paddingLength)]);
 
-            status = new CryptoStatus(readStream.Position, readStream.Length, CryptoUtils.BlockSize);
+            CryptoStatus status = new CryptoStatus(readStream.Position, readStream.Length, CryptoUtils.BlockSize);
+            progress.Report(status);
+        }
+
+        /// <summary>
+        /// Обработать часть блоков буфера.
+        /// </summary>
+        /// <param name="readStream">Поток данных.</param>
+        /// <param name="writeStream">Поток преобразованных данных.</param>
+        /// <param name="buffer">Буфер.</param>
+        /// <param name="action">Действие</param>
+        /// <param name="progress">Прогресс операции.</param>
+        /// <param name="cancellationToken">Токен отмены операции.</param>
+        private void ProcessBuffer(
+            Stream readStream,
+            Stream writeStream,
+            ref Span<byte> buffer,
+            CryptBlockDelegate action,
+            IProgress<CryptoStatus> progress,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            readStream.Read(buffer);
+
+            Span<Block> blocks = MemoryMarshal.Cast<byte, Block>(buffer);
+
+            for (int i = 0; i < blocks.Length; i++)
+            {
+                action.Invoke(ref blocks[i], this.parameters);
+            }
+
+            writeStream.Write(buffer);
+
+            CryptoStatus status = new CryptoStatus(readStream.Position, readStream.Length, CryptoUtils.BlockSize);
             progress.Report(status);
         }
     }
