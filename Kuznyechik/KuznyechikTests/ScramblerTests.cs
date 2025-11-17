@@ -1,5 +1,6 @@
 ﻿using Kuznyechik;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -75,6 +76,7 @@ namespace KuznyechikTests
         [DataRow(805306368, DisplayName = "805306368 байт")]
         public void EncryptBigData(long arraySize)
         {
+            Stopwatch stopwatch = new Stopwatch();
             byte[] key = new byte[32];
             byte[] arr = new byte[arraySize];
 
@@ -89,8 +91,16 @@ namespace KuznyechikTests
 
             using (Scrambler scrambler = new Scrambler(key))
             {
+                stopwatch.Start();
                 scrambler.Encrypt(ref arrCopy);
+                stopwatch.Stop();
+
+                Console.WriteLine("Шифрование закончено за: {0}", stopwatch.Elapsed);
+
+                stopwatch.Restart();
                 scrambler.Decrypt(ref arrCopy);
+                stopwatch.Stop();
+                Console.WriteLine("Расшифоровывание закончено за: {0}", stopwatch.Elapsed);
             }
 
             Assert.IsTrue(arr.SequenceEqual(arrCopy));

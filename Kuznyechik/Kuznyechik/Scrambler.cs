@@ -317,7 +317,7 @@ namespace Kuznyechik
 
             buffer[^1] = paddingLength;
 
-            ref Block block = ref Unsafe.As<byte, Block>(ref buffer[0]);
+            ref Block block = ref Unsafe.As<byte, Block>(ref MemoryMarshal.GetReference(buffer));
             CryptoUtils.EncryptBlock(ref block, this.parameters);
 
             writeStream.Write(buffer);
@@ -374,7 +374,8 @@ namespace Kuznyechik
             buffer = new byte[CryptoUtils.BlockSize];
             readStream.Read(buffer);
 
-            ref Block block = ref Unsafe.As<byte, Block>(ref buffer[0]);
+            ref Block block = ref Unsafe.As<byte, Block>(ref MemoryMarshal.GetReference(buffer));
+
             CryptoUtils.DecryptBlock(ref block, this.parameters);
 
             byte paddingLength = buffer[^1];

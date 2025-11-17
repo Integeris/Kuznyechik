@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
 
 namespace Kuznyechik
 {
@@ -85,8 +84,8 @@ namespace Kuznyechik
 
             for (int i = 0; i < BlockSize; i++)
             {
-                ref byte currentBlock = ref Unsafe.Add<byte>(ref blockPtr, i);
-                currentBlock = Unsafe.Add(ref replaceBytesPtr, currentBlock);
+                ref byte currentByte = ref Unsafe.Add(ref blockPtr, i);
+                currentByte = Unsafe.Add(ref replaceBytesPtr, currentByte);
             }
         }
 
@@ -111,33 +110,29 @@ namespace Kuznyechik
         private static unsafe void TransformBlock(ref Block block, in CryptoParameters parameters)
         {
             ref readonly GaloisTable galoisTable = ref parameters.GaloisTable;
-            
-            fixed (Block* ptr = &block)
-            fixed (Block* linearTransformationBlock = &parameters.LinearTransformation)
+            byte copyLength = BlockSize - 1;
+
+            fixed (byte* blockPtr = &Unsafe.As<Block, byte>(ref block))
             {
-                byte* blockPtr = (byte*)ptr;
-                byte* linearTransformationBlockPtr = (byte*)linearTransformationBlock;
+                byte sum = galoisTable[blockPtr[0], 0];
 
-                byte sum = galoisTable[blockPtr[0], linearTransformationBlockPtr[0]];
+                sum ^= galoisTable[blockPtr[1], 1];
+                sum ^= galoisTable[blockPtr[2], 2];
+                sum ^= galoisTable[blockPtr[3], 3];
+                sum ^= galoisTable[blockPtr[4], 4];
+                sum ^= galoisTable[blockPtr[5], 5];
+                sum ^= galoisTable[blockPtr[6], 6];
+                sum ^= galoisTable[blockPtr[7], 7];
+                sum ^= galoisTable[blockPtr[8], 8];
+                sum ^= galoisTable[blockPtr[9], 9];
+                sum ^= galoisTable[blockPtr[10], 10];
+                sum ^= galoisTable[blockPtr[11], 11];
+                sum ^= galoisTable[blockPtr[12], 12];
+                sum ^= galoisTable[blockPtr[13], 13];
+                sum ^= galoisTable[blockPtr[14], 14];
+                sum ^= galoisTable[blockPtr[15], 15];
 
-                sum ^= galoisTable[blockPtr[1], linearTransformationBlockPtr[1]];
-                sum ^= galoisTable[blockPtr[2], linearTransformationBlockPtr[2]];
-                sum ^= galoisTable[blockPtr[3], linearTransformationBlockPtr[3]];
-                sum ^= galoisTable[blockPtr[4], linearTransformationBlockPtr[4]];
-                sum ^= galoisTable[blockPtr[5], linearTransformationBlockPtr[5]];
-                sum ^= galoisTable[blockPtr[6], linearTransformationBlockPtr[6]];
-                sum ^= galoisTable[blockPtr[7], linearTransformationBlockPtr[7]];
-                sum ^= galoisTable[blockPtr[8], linearTransformationBlockPtr[8]];
-                sum ^= galoisTable[blockPtr[9], linearTransformationBlockPtr[9]];
-                sum ^= galoisTable[blockPtr[10], linearTransformationBlockPtr[10]];
-                sum ^= galoisTable[blockPtr[11], linearTransformationBlockPtr[11]];
-                sum ^= galoisTable[blockPtr[12], linearTransformationBlockPtr[12]];
-                sum ^= galoisTable[blockPtr[13], linearTransformationBlockPtr[13]];
-                sum ^= galoisTable[blockPtr[14], linearTransformationBlockPtr[14]];
-                sum ^= galoisTable[blockPtr[15], linearTransformationBlockPtr[15]];
-
-
-                Unsafe.CopyBlock(blockPtr, blockPtr + 1, BlockSize - 1);
+                Buffer.MemoryCopy(blockPtr + 1, blockPtr, copyLength, copyLength);
                 blockPtr[15] = sum;
             }
         }
@@ -150,32 +145,28 @@ namespace Kuznyechik
         private static unsafe void ReverseTransformBlock(ref Block block, in CryptoParameters parameters)
         {
             ref readonly GaloisTable galoisTable = ref parameters.GaloisTable;
-            ref readonly Block linearTransformation = ref parameters.LinearTransformation;
+            byte copyLength = BlockSize - 1;
 
-            fixed (Block* ptr = &block)
-            fixed (Block* linearTransformationBlock = &parameters.LinearTransformation)
+            fixed (byte* blockPtr = &Unsafe.As<Block, byte>(ref block))
             {
-                byte* blockPtr = (byte*)ptr;
-                byte* linearTransformationBlockPtr = (byte*)linearTransformationBlock;
-
                 byte sum = blockPtr[15];
-                Unsafe.CopyBlock(blockPtr + 1, blockPtr, BlockSize - 1);
+                Buffer.MemoryCopy(blockPtr, blockPtr + 1, copyLength, copyLength);
 
-                sum ^= galoisTable[blockPtr[15], linearTransformationBlockPtr[15]];
-                sum ^= galoisTable[blockPtr[14], linearTransformationBlockPtr[14]];
-                sum ^= galoisTable[blockPtr[13], linearTransformationBlockPtr[13]];
-                sum ^= galoisTable[blockPtr[12], linearTransformationBlockPtr[12]];
-                sum ^= galoisTable[blockPtr[11], linearTransformationBlockPtr[11]];
-                sum ^= galoisTable[blockPtr[10], linearTransformationBlockPtr[10]];
-                sum ^= galoisTable[blockPtr[9], linearTransformationBlockPtr[9]];
-                sum ^= galoisTable[blockPtr[8], linearTransformationBlockPtr[8]];
-                sum ^= galoisTable[blockPtr[7], linearTransformationBlockPtr[7]];
-                sum ^= galoisTable[blockPtr[6], linearTransformationBlockPtr[6]];
-                sum ^= galoisTable[blockPtr[5], linearTransformationBlockPtr[5]];
-                sum ^= galoisTable[blockPtr[4], linearTransformationBlockPtr[4]];
-                sum ^= galoisTable[blockPtr[3], linearTransformationBlockPtr[3]];
-                sum ^= galoisTable[blockPtr[2], linearTransformationBlockPtr[2]];
-                sum ^= galoisTable[blockPtr[1], linearTransformationBlockPtr[1]];
+                sum ^= galoisTable[blockPtr[15], 15];
+                sum ^= galoisTable[blockPtr[14], 14];
+                sum ^= galoisTable[blockPtr[13], 13];
+                sum ^= galoisTable[blockPtr[12], 12];
+                sum ^= galoisTable[blockPtr[11], 11];
+                sum ^= galoisTable[blockPtr[10], 10];
+                sum ^= galoisTable[blockPtr[9], 9];
+                sum ^= galoisTable[blockPtr[8], 8];
+                sum ^= galoisTable[blockPtr[7], 7];
+                sum ^= galoisTable[blockPtr[6], 6];
+                sum ^= galoisTable[blockPtr[5], 5];
+                sum ^= galoisTable[blockPtr[4], 4];
+                sum ^= galoisTable[blockPtr[3], 3];
+                sum ^= galoisTable[blockPtr[2], 2];
+                sum ^= galoisTable[blockPtr[1], 1];
 
                 blockPtr[0] = sum;
             }

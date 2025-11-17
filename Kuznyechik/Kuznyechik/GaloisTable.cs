@@ -7,26 +7,27 @@ namespace Kuznyechik
     /// <summary>
     /// Таблица предвычесленных значений поля Галуа.
     /// </summary>
-    [StructLayout(LayoutKind.Sequential, Size = 65536)]
+    [StructLayout(LayoutKind.Sequential, Size = 4096)]
     internal unsafe struct GaloisTable
     {
         /// <summary>
         /// Предвычесленные значения.
         /// </summary>
-        private fixed byte data[65536];
+        private fixed byte data[4096];
 
         /// <summary>
         /// Создание таблицы предвычесленных значений поля Галуа.
         /// </summary>
-        public GaloisTable()
+        /// <param name="linearTransformation">Байты линейной трансформации.</param>
+        public GaloisTable(in Block linearTransformation)
         {
             ref byte dataRef = ref Unsafe.As<GaloisTable, byte>(ref this);
 
             for (int i = Byte.MinValue; i <= Byte.MaxValue; i++)
             {
-                for (int j = Byte.MinValue; j <= Byte.MaxValue; j++)
+                for (byte j = 0; j < CryptoUtils.BlockSize; j++)
                 {
-                    this[(byte)i, (byte)j] = GaloisMultiplication((byte)i, (byte)j);
+                    this[(byte)i, j] = GaloisMultiplication((byte)i, linearTransformation[j]);
                 }
             }
         }
@@ -37,10 +38,7 @@ namespace Kuznyechik
         /// <returns>Представление таблицы.</returns>
         public readonly ReadOnlySpan<byte> AsSpan()
         {
-            fixed (GaloisTable* tablePtr = &this)
-            {
-                return new ReadOnlySpan<byte>(tablePtr, 65536);
-            }
+            return MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(this), 1));
         }
 
         /// <summary>
@@ -82,21 +80,21 @@ namespace Kuznyechik
         /// Получение результата умножения двух байт.
         /// </summary>
         /// <param name="x">Первое значение.</param>
-        /// <param name="y">Второе значение.</param>
+        /// <param name="linearTransformationIndex">Индекс линейной трансформации.</param>
         /// <returns>Результат умножения.</returns>
-        public readonly byte this[byte x, byte y]
+        public readonly byte this[byte x, byte linearTransformationIndex]
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
-                ref byte arrPtr = ref Unsafe.AsRef(this.data[0]);
-                return Unsafe.Add(ref arrPtr, x << 8 | y);
+                ref byte arrPtr = ref Unsafe.As<GaloisTable, byte>(ref Unsafe.AsRef(this));
+                return Unsafe.Add(ref arrPtr, x * 16 + linearTransformationIndex);
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set
             {
-                ref byte arrPtr = ref Unsafe.AsRef(this.data[x << 8 | y]);
-                arrPtr = value;
+                ref byte arrPtr = ref Unsafe.As<GaloisTable, byte>(ref Unsafe.AsRef(this));
+                Unsafe.Add(ref arrPtr, x * 16 + linearTransformationIndex) = value;
             }
         }
 

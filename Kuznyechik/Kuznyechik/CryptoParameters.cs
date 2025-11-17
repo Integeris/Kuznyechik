@@ -277,7 +277,7 @@ namespace Kuznyechik
                 key = new byte[CryptoUtils.KeySize];
             }
 
-            this.galoisTable = new GaloisTable();
+            this.galoisTable = new GaloisTable(this.linearTransformation);
             this.SetNewKey(key);
         }
 
@@ -333,6 +333,7 @@ namespace Kuznyechik
             reverseReplaceBytes.CopyTo(this.reverseReplaceBytes);
 
             this.linearTransformation = linearTransformation;
+            this.galoisTable = new GaloisTable(linearTransformation);
 
             unsafe
             {
