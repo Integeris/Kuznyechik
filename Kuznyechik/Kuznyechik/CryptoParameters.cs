@@ -10,7 +10,7 @@ namespace Kuznyechik
     public class CryptoParameters
     {
         /// <summary>
-        /// Таблица предвычесленных значений поля Галуа.
+        /// Таблица предвычисленных значений поля Галуа.
         /// </summary>
         private readonly GaloisTable galoisTable;
 
@@ -45,7 +45,7 @@ namespace Kuznyechik
         private ImmutableArray<byte> key;
 
         /// <summary>
-        /// Таблица предвычесленных значений поля Галуа.
+        /// Таблица предвычисленных значений поля Галуа.
         /// </summary>
         public ReadOnlySpan<byte> GaloisTableBytes
         {
@@ -101,7 +101,7 @@ namespace Kuznyechik
         }
 
         /// <summary>
-        /// Таблица предвычесленных значений поля Галуа.
+        /// Таблица предвычисленных значений поля Галуа.
         /// </summary>
         internal ref readonly GaloisTable GaloisTable
         {
@@ -411,7 +411,7 @@ namespace Kuznyechik
             Block tmpKey = firstKey ^ constant;
 
             CryptoUtils.ReplaceBytes(ref tmpKey, this.replaceBytes);
-            CryptoUtils.MultiTransformEncrypt(ref tmpKey, this);
+            CryptoUtils.LinearTransformEncrypt(ref tmpKey, this);
 
             tmpKey.Xor(secondKey);
 

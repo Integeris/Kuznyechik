@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 namespace Kuznyechik
 {
     /// <summary>
-    /// Таблица предвычесленных значений поля Галуа.
+    /// Таблица предвычисленных значений поля Галуа.
     /// </summary>
     [StructLayout(LayoutKind.Sequential, Size = 4096)]
     internal unsafe struct GaloisTable
@@ -16,7 +16,7 @@ namespace Kuznyechik
         private fixed byte data[4096];
 
         /// <summary>
-        /// Создание таблицы предвычесленных значений поля Галуа.
+        /// Создание таблицы предвычисленных значений поля Галуа.
         /// </summary>
         /// <param name="linearTransformation">Байты линейной трансформации.</param>
         public GaloisTable(in Block linearTransformation)
@@ -101,7 +101,7 @@ namespace Kuznyechik
         /// <summary>
         /// Неявное преобразование таблицы в ReadOnlySpan.
         /// </summary>
-        /// <param name="table">Таблица предвычесленных значений поля Галуа.</param>
+        /// <param name="table">Таблица предвычисленных значений поля Галуа.</param>
         public static implicit operator ReadOnlySpan<byte>(GaloisTable table)
         {
             return table.AsSpan();

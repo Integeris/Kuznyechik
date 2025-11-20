@@ -12,7 +12,7 @@ namespace KuznyechikTests
     [TestClass()]
     public class ScramblerTests
     {
-        [TestMethod("Шифрование и дешифрование строк")]
+        [TestMethod("Шифрование и расшифрование строк")]
         [DataRow("Привет мир!", DisplayName = "Привет мир!")]
         [DataRow("1234567890", DisplayName = "1234567890")]
         [DataRow("", DisplayName = "Пустая строка")]
@@ -34,7 +34,7 @@ namespace KuznyechikTests
             Assert.AreEqual(text, outText);
         }
 
-        [TestMethod("Шифрование и дешифрование потока")]
+        [TestMethod("Шифрование и Расшифрование потока")]
         [DataRow("Привет мир!", DisplayName = "Привет мир!")]
         [DataRow("1234567890", DisplayName = "1234567890")]
         public void EncryptStream(string text)
@@ -67,7 +67,7 @@ namespace KuznyechikTests
             Assert.IsTrue(message.SequenceEqual(messageCopy));
         }
 
-        [TestMethod("Шифрование и дешифрование большого объёма данных")]
+        [TestMethod("Шифрование и расшифрование большого объёма данных")]
         [DataRow(160000, DisplayName = "160000 байт")]
         [DataRow(16000000, DisplayName = "16000000 байт")]
         [DataRow(201326592, DisplayName = "201326592 байт")]
@@ -104,7 +104,7 @@ namespace KuznyechikTests
             Assert.IsTrue(arr.SequenceEqual(arrCopy));
         }
 
-        [TestMethod("Шифрование и дешифрование строк асинхронно")]
+        [TestMethod("Шифрование и расшифрование строк асинхронно")]
         [DataRow("Привет мир!", DisplayName = "Привет мир!")]
         [DataRow("1234567890", DisplayName = "1234567890")]
         [DataRow("", DisplayName = "Пустая строка")]
@@ -127,7 +127,7 @@ namespace KuznyechikTests
             Assert.AreEqual(text, outText);
         }
 
-        [TestMethod("Шифрование и дешифрование потока асинхронно")]
+        [TestMethod("Шифрование и расшифрование потока асинхронно")]
         [DataRow("Привет мир!", DisplayName = "Привет мир!")]
         [DataRow("1234567890", DisplayName = "1234567890")]
         public async Task EncryptAsyncStream(string text)

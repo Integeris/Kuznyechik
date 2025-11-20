@@ -45,7 +45,7 @@ namespace Kuznyechik
                 ref Block key = ref keys[i];
                 block.Xor(key);
                 ReplaceBytes(ref block, parameters.ReplaceBytes);
-                MultiTransformEncrypt(ref block, parameters);
+                LinearTransformEncrypt(ref block, parameters);
             }
 
             block.Xor(keys[9]);
@@ -66,7 +66,7 @@ namespace Kuznyechik
             {
                 ref Block key = ref keys[i];
 
-                MultiTransformDecrypt(ref block, parameters);
+                LinearTransformDecrypt(ref block, parameters);
                 ReplaceBytes(ref block, parameters.ReverseReplaceBytes);
                 block.Xor(key);
             }
@@ -94,7 +94,7 @@ namespace Kuznyechik
         /// </summary>
         /// <param name="block">Блок.</param>
         /// <param name="parameters">Параметры.</param>
-        internal static void MultiTransformEncrypt(ref Block block, in CryptoParameters parameters)
+        internal static void LinearTransformEncrypt(ref Block block, in CryptoParameters parameters)
         {
             for (int i = 0; i < BlockSize; i++)
             {
@@ -177,7 +177,7 @@ namespace Kuznyechik
         /// </summary>
         /// <param name="block">Блок.</param>
         /// <param name="parameters">Параметры.</param>
-        private static void MultiTransformDecrypt(ref Block block, in CryptoParameters parameters)
+        private static void LinearTransformDecrypt(ref Block block, in CryptoParameters parameters)
         {
             for (int i = 0; i < BlockSize; i++)
             {

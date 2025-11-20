@@ -54,7 +54,7 @@ namespace Kuznyechik
         /// <param name="parameters">Параметры шифратора</param>
         public Scrambler(CryptoParameters parameters)
         {
-            this.bufferLength = 4096;
+            this.bufferLength = 65536;
             this.parameters = parameters;
         }
 
