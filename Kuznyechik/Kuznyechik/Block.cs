@@ -100,6 +100,16 @@ namespace Kuznyechik
         /// <summary>
         /// XOR двух блоков.
         /// </summary>
+        /// <param name="other">Второй блок.</param>
+        public void Xor(in Block other)
+        {
+            this.low ^= other.low;
+            this.high ^= other.high;
+        }
+
+        /// <summary>
+        /// XOR двух блоков.
+        /// </summary>
         /// <param name="left">Первый блок.</param>
         /// <param name="right">Второй блок.</param>
         /// <returns>Новый блок с вычисленным XOR.</returns>

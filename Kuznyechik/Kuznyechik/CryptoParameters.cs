@@ -413,7 +413,7 @@ namespace Kuznyechik
             CryptoUtils.ReplaceBytes(ref tmpKey, this.replaceBytes);
             CryptoUtils.MultiTransformEncrypt(ref tmpKey, this);
 
-            tmpKey ^= secondKey;
+            tmpKey.Xor(secondKey);
 
             secondKey = firstKey;
             firstKey = tmpKey;

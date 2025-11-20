@@ -26,11 +26,9 @@ namespace KuznyechikTests
                 random.NextBytes(key);
             }
 
-            using (Scrambler scrambler = new Scrambler(key))
-            {
-                scrambler.Encrypt(ref message);
-                scrambler.Decrypt(ref message);
-            }
+            Scrambler scrambler = new Scrambler(key);
+            scrambler.Encrypt(ref message);
+            scrambler.Decrypt(ref message);
 
             string outText = Encoding.UTF8.GetString(message);
             Assert.AreEqual(text, outText);
@@ -52,8 +50,9 @@ namespace KuznyechikTests
 
             using (MemoryStream dataStream = new MemoryStream())
             using (MemoryStream encryptedStream = new MemoryStream())
-            using (Scrambler scrambler = new Scrambler(key))
             {
+                Scrambler scrambler = new Scrambler(key);
+
                 dataStream.Write(messageCopy, 0, messageCopy.Length);
                 dataStream.Seek(0, SeekOrigin.Begin);
 
@@ -89,19 +88,18 @@ namespace KuznyechikTests
             byte[] arrCopy = new byte[arr.Length];
             Array.Copy(arr, arrCopy, arr.Length);
 
-            using (Scrambler scrambler = new Scrambler(key))
-            {
-                stopwatch.Start();
-                scrambler.Encrypt(ref arrCopy);
-                stopwatch.Stop();
+            Scrambler scrambler = new Scrambler(key);
 
-                Console.WriteLine("Шифрование закончено за: {0}", stopwatch.Elapsed);
+            stopwatch.Start();
+            scrambler.Encrypt(ref arrCopy);
+            stopwatch.Stop();
 
-                stopwatch.Restart();
-                scrambler.Decrypt(ref arrCopy);
-                stopwatch.Stop();
-                Console.WriteLine("Расшифоровывание закончено за: {0}", stopwatch.Elapsed);
-            }
+            Console.WriteLine("Шифрование закончено за: {0}", stopwatch.Elapsed);
+
+            stopwatch.Restart();
+            scrambler.Decrypt(ref arrCopy);
+            stopwatch.Stop();
+            Console.WriteLine("Расшифоровывание закончено за: {0}", stopwatch.Elapsed);
 
             Assert.IsTrue(arr.SequenceEqual(arrCopy));
         }
@@ -120,11 +118,10 @@ namespace KuznyechikTests
                 random.NextBytes(key);
             }
 
-            using (Scrambler scrambler = new Scrambler(key))
-            {
-                message = await scrambler.EncryptAsync(message);
-                message = await scrambler.DecryptAsync(message);
-            }
+            Scrambler scrambler = new Scrambler(key);
+
+            message = await scrambler.EncryptAsync(message);
+            message = await scrambler.DecryptAsync(message);
 
             string outText = Encoding.UTF8.GetString(message);
             Assert.AreEqual(text, outText);
@@ -146,8 +143,9 @@ namespace KuznyechikTests
 
             using (MemoryStream dataStream = new MemoryStream())
             using (MemoryStream encryptedStream = new MemoryStream())
-            using (Scrambler scrambler = new Scrambler(key))
             {
+                Scrambler scrambler = new Scrambler(key);
+
                 dataStream.Write(messageCopy, 0, messageCopy.Length);
                 dataStream.Seek(0, SeekOrigin.Begin);
 
@@ -178,25 +176,24 @@ namespace KuznyechikTests
             byte[] arrCopy = new byte[arr.Length];
             Array.Copy(arr, arrCopy, arr.Length);
 
-            using (Scrambler scrambler = new Scrambler(key))
-            {
-                CancellationTokenSource cancellationToken = new CancellationTokenSource();
-                Task task = scrambler.EncryptAsync(arr, cancellationToken: cancellationToken.Token);
-                cancellationToken.CancelAfter(100);
+            Scrambler scrambler = new Scrambler(key);
 
-                try
-                {
-                    await task;
-                    Assert.Fail($"Ожидалась {nameof(OperationCanceledException)}");
-                }
-                catch (OperationCanceledException)
-                {
-                    Assert.IsTrue(true);
-                }
-                catch (Exception ex)
-                {
-                    Assert.Fail($"Ожидалась {nameof(OperationCanceledException)}, но получено {ex.GetType()}");
-                }
+            CancellationTokenSource cancellationToken = new CancellationTokenSource();
+            Task task = scrambler.EncryptAsync(arr, cancellationToken: cancellationToken.Token);
+            cancellationToken.CancelAfter(100);
+
+            try
+            {
+                await task;
+                Assert.Fail($"Ожидалась {nameof(OperationCanceledException)}");
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.IsTrue(true);
+            }
+            catch (Exception ex)
+            {
+                Assert.Fail($"Ожидалась {nameof(OperationCanceledException)}, но получено {ex.GetType()}");
             }
         }
 
@@ -216,23 +213,22 @@ namespace KuznyechikTests
             byte[] arrCopy = new byte[arr.Length];
             Array.Copy(arr, arrCopy, arr.Length);
 
-            using (Scrambler scrambler = new Scrambler(key))
-            {
-                Progress<CryptoStatus> progress = new Progress<CryptoStatus>((status) => 
-                    Console.WriteLine("Позиция {0} из {1} (буфер: {2}). Процент: {3:P2}",
-                        status.DataPosition,
-                        status.DataLength,
-                        status.BufferLength,
-                        status.DataPosition / status.DataLength));
+            Scrambler scrambler = new Scrambler(key);
 
-                CancellationTokenSource cancellationToken = new CancellationTokenSource();
-                Task task = scrambler.EncryptAsync(arr, progress, cancellationToken.Token);
+            Progress<CryptoStatus> progress = new Progress<CryptoStatus>((status) =>
+                Console.WriteLine("Позиция {0} из {1} (буфер: {2}). Процент: {3:P2}",
+                    status.DataPosition,
+                    status.DataLength,
+                    status.BufferLength,
+                    status.DataPosition / status.DataLength));
 
-                cancellationToken.CancelAfter(10000);
-                task.Wait();
+            CancellationTokenSource cancellationToken = new CancellationTokenSource();
+            Task task = scrambler.EncryptAsync(arr, progress, cancellationToken.Token);
 
-                Assert.IsTrue(true);
-            }
+            cancellationToken.CancelAfter(10000);
+            task.Wait();
+
+            Assert.IsTrue(true);
         }
     }
 }

@@ -11,17 +11,34 @@ namespace Kuznyechik
     /// <summary>
     /// Шифровщик (алгоритм "Кузнечик").
     /// </summary>
-    public sealed class Scrambler : IDisposable
+    public sealed class Scrambler
     {
+        /// <summary>
+        /// Размер буфера.
+        /// </summary>
+        private uint bufferLength;
+
         /// <summary>
         /// Параметры.
         /// </summary>
         private readonly CryptoParameters parameters;
 
         /// <summary>
-        /// Очищен ли объект.
+        /// Размер буфера.
         /// </summary>
-        private bool disposed;
+        public uint BufferLength
+        {
+            get => bufferLength;
+            set
+            {
+                if (bufferLength % CryptoUtils.BlockSize != 0)
+                {
+                    throw new ArgumentException("Буфер должен быть кратен размеру блока.", nameof(this.BufferLength));
+                }
+
+                bufferLength = value;
+            }
+        }
 
         /// <summary>
         /// Параметры.
@@ -37,6 +54,7 @@ namespace Kuznyechik
         /// <param name="parameters">Параметры шифратора</param>
         public Scrambler(CryptoParameters parameters)
         {
+            this.bufferLength = 4096;
             this.parameters = parameters;
         }
 
@@ -45,14 +63,6 @@ namespace Kuznyechik
         /// </summary>
         /// <param name="key">Ключ (32 байта).</param>
         public Scrambler(byte[] key) : this(new CryptoParameters(key)) { }
-
-        /// <summary>
-        /// Уничтожение шифровщика.
-        /// </summary>
-        ~Scrambler()
-        {
-            this.Dispose();
-        }
 
         /// <summary>
         /// Шифрование массива блоков.
@@ -203,21 +213,6 @@ namespace Kuznyechik
         }
 
         /// <summary>
-        /// Освобождение неуправляемых ресурсов.
-        /// </summary>
-        public void Dispose()
-        {
-            // TODO: Рассмотреть удаление метода Dispose.
-            if (this.disposed)
-            {
-                return;
-            }
-
-            GC.SuppressFinalize(this);
-            this.disposed = true;
-        }
-
-        /// <summary>
         /// Проверка потоков.
         /// </summary>
         /// <param name="readStream">Поток для чтения данных.</param>
@@ -280,8 +275,7 @@ namespace Kuznyechik
         {
             progress ??= new Progress<CryptoStatus>();
 
-            const short bufferSize = 4096;
-            short bufferBlockSize = bufferSize / CryptoUtils.BlockSize;
+            uint bufferBlockSize = bufferLength / CryptoUtils.BlockSize;
             long totalBytes = readStream.Length - readStream.Position;
             long blockCount = totalBytes / CryptoUtils.BlockSize;
             long partCount = blockCount / bufferBlockSize;
@@ -289,7 +283,7 @@ namespace Kuznyechik
 
             byte paddingLength = (byte)(CryptoUtils.BlockSize - totalBytes % CryptoUtils.BlockSize);
 
-            Span<byte> buffer = new byte[bufferSize];
+            Span<byte> buffer = new byte[bufferLength];
 
             for (; partCount > 0; partCount--)
             {
@@ -341,14 +335,13 @@ namespace Kuznyechik
         {
             progress ??= new Progress<CryptoStatus>();
 
-            const short bufferSize = 4096;
-            short bufferBlockSize = bufferSize / CryptoUtils.BlockSize;
+            uint bufferBlockSize = bufferLength / CryptoUtils.BlockSize;
             long totalBytes = readStream.Length - readStream.Position;
             long blockCount = totalBytes / CryptoUtils.BlockSize - 1;
             long partCount = blockCount / bufferBlockSize;
             int leftBlockCount = (int)(blockCount - partCount * bufferBlockSize);
 
-            Span<byte> buffer = new byte[bufferSize];
+            Span<byte> buffer = new byte[bufferLength];
 
             for (; partCount > 0; partCount--)
             {

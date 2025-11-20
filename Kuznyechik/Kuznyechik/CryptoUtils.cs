@@ -43,12 +43,12 @@ namespace Kuznyechik
             for (int i = 0; i <= 8; i++)
             {
                 ref Block key = ref keys[i];
-                block ^= key;
+                block.Xor(key);
                 ReplaceBytes(ref block, parameters.ReplaceBytes);
                 MultiTransformEncrypt(ref block, parameters);
             }
 
-            block ^= keys[9];
+            block.Xor(keys[9]);
         }
 
         /// <summary>
@@ -60,7 +60,7 @@ namespace Kuznyechik
         {
             Block[] keys = parameters.Keys;
 
-            block ^= keys[9];
+            block.Xor(keys[9]);
 
             for (int i = 8; i >= 0; i--)
             {
@@ -68,7 +68,7 @@ namespace Kuznyechik
 
                 MultiTransformDecrypt(ref block, parameters);
                 ReplaceBytes(ref block, parameters.ReverseReplaceBytes);
-                block ^= key;
+                block.Xor(key);
             }
         }
 
