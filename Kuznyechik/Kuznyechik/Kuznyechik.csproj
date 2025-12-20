@@ -8,14 +8,14 @@
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <SignAssembly>False</SignAssembly>
     <Title>Кузнечик (ГОСТ 34.12-2018)</Title>
-    <Description>Библиотека для шифрования данных с помощью алгоритма "Кузнечик" из ГОСТ 34.12-2018.</Description>
+    <Description>Библиотека для зашифровывания данных с помощью алгоритма "Кузнечик" из ГОСТ 34.12-2018.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/Integeris/Kuznyechik.git</RepositoryUrl>
     <Authors>Integer (Черняков Антон)</Authors>
     <Company />
     <PackageTags>Kuznyechik;Cryptography;Encryption;GOST;GOST 34.12-2015;GOST 34.12-2018;ГОСТ 34.12-2015;ГОСТ 34.12-2018</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
@@ -33,6 +33,10 @@
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
+	<None Include="..\..\README-en.md">
+		<Pack>True</Pack>
+		<PackagePath>\</PackagePath>
+	</None>
   </ItemGroup>
 
   <ItemGroup>

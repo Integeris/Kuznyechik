@@ -160,7 +160,7 @@ namespace KuznyechikTests
             Assert.IsTrue(message.SequenceEqual(messageCopy));
         }
 
-        [TestMethod("Отмена асинхронного шифрования данных")]
+        [TestMethod("Отмена асинхронного зашифровывания данных")]
         [DataRow(805306368)]
         public async Task CancelEncryptAsync(long arraySize)
         {
@@ -197,7 +197,7 @@ namespace KuznyechikTests
             }
         }
 
-        [TestMethod("Проверка прогресса асинхронного шифрования данных")]
+        [TestMethod("Проверка прогресса асинхронного зашифровывания данных")]
         [DataRow(1610612736, DisplayName = "1610612736")]
         public void ProgressEncryptAsync(long arraySize)
         {

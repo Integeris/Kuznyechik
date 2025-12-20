@@ -14,7 +14,7 @@ namespace Kuznyechik
     public sealed class Scrambler
     {
         /// <summary>
-        /// Размер буфера.
+        /// Размер буфера в байтах.
         /// </summary>
         private uint bufferLength;
 
@@ -24,19 +24,19 @@ namespace Kuznyechik
         private readonly CryptoParameters parameters;
 
         /// <summary>
-        /// Размер буфера.
+        /// Размер буфера в байтах.
         /// </summary>
         public uint BufferLength
         {
-            get => bufferLength;
+            get => this.bufferLength;
             set
             {
-                if (bufferLength % CryptoUtils.BlockSize != 0)
+                if (value % CryptoUtils.BlockSize != 0)
                 {
                     throw new ArgumentException("Буфер должен быть кратен размеру блока.", nameof(this.BufferLength));
                 }
 
-                bufferLength = value;
+                this.bufferLength = value;
             }
         }
 
@@ -55,7 +55,7 @@ namespace Kuznyechik
         public Scrambler(CryptoParameters parameters)
         {
             this.bufferLength = 65536;
-            this.parameters = parameters;
+            this.parameters = parameters ?? throw new ArgumentNullException(nameof(parameters));
         }
 
         /// <summary>
@@ -65,7 +65,7 @@ namespace Kuznyechik
         public Scrambler(byte[] key) : this(new CryptoParameters(key)) { }
 
         /// <summary>
-        /// Шифрование массива блоков.
+        /// Зашифровывание массива блоков.
         /// </summary>
         /// <param name="arr">Массив.</param>
         /// <exception cref="ArgumentException"></exception>
@@ -80,7 +80,7 @@ namespace Kuznyechik
         }
 
         /// <summary>
-        /// Шифрование данных из потока в поток.
+        /// Зашифровывание данных из потока в поток.
         /// </summary>
         /// <param name="readStream">Поток данных.</param>
         /// <param name="writeStream">Выходной поток с зашифрованными данными.</param>
@@ -91,37 +91,34 @@ namespace Kuznyechik
         }
 
         /// <summary>
-        /// Шифрование массива блоков.
+        /// Зашифровывание массива блоков.
         /// </summary>
         /// <param name="arr">Массив.</param>
-        /// <param name="progress">Прогресс шифрования.</param>
+        /// <param name="progress">Прогресс зашифровывания.</param>
         /// <param name="cancellationToken">Токен отмены операции.</param>
-        /// <returns>Задча шифрования.</returns>
+        /// <returns>Задача зашифровывания.</returns>
         /// <exception cref="ArgumentException"></exception>
         public async Task<byte[]> EncryptAsync(
             byte[] arr,
             IProgress<CryptoStatus> progress = default,
             CancellationToken cancellationToken = default)
         {
-            using (MemoryStream readStream = new MemoryStream())
+            using (MemoryStream readStream = new MemoryStream(arr, 0, arr.Length))
             using (MemoryStream writeStream = new MemoryStream())
             {
-                readStream.Write(arr, 0, arr.Length);
-                readStream.Position = 0;
-
                 await this.EncryptAsync(readStream, writeStream, progress, cancellationToken);
                 return writeStream.ToArray();
             }
         }
 
         /// <summary>
-        /// Шифрование данных из потока в поток.
+        /// Зашифровывание данных из потока в поток.
         /// </summary>
         /// <param name="readStream">Поток для чтения данных.</param>
         /// <param name="writeStream">Выходной поток с зашифрованными данными.</param>
-        /// <param name="progress">Прогресс шифрования.</param>
+        /// <param name="progress">Прогресс зашифровывания.</param>
         /// <param name="cancellationToken">Токен отмены операции.</param>
-        /// <returns>Задача шифрования.</returns>
+        /// <returns>Задача зашифровывания.</returns>
         public async Task EncryptAsync(
             Stream readStream,
             Stream writeStream,
@@ -174,12 +171,9 @@ namespace Kuznyechik
             IProgress<CryptoStatus> progress = default,
             CancellationToken cancellationToken = default)
         {
-            using (MemoryStream readStream = new MemoryStream())
+            using (MemoryStream readStream = new MemoryStream(arr, 0, arr.Length))
             using (MemoryStream writeStream = new MemoryStream())
             {
-                readStream.Write(arr, 0, arr.Length);
-                readStream.Position = 0;
-
                 await this.DecryptAsync(readStream, writeStream, progress, cancellationToken);
                 return writeStream.ToArray();
             }
@@ -261,7 +255,7 @@ namespace Kuznyechik
         }
 
         /// <summary>
-        /// Выполнение шифрования на устройстве.
+        /// Выполнение зашифровывания.
         /// </summary>
         /// <param name="readStream">Поток данных.</param>
         /// <param name="writeStream">Поток преобразованных данных.</param>
@@ -275,7 +269,7 @@ namespace Kuznyechik
         {
             progress ??= new Progress<CryptoStatus>();
 
-            uint bufferBlockSize = bufferLength / CryptoUtils.BlockSize;
+            uint bufferBlockSize = this.bufferLength / CryptoUtils.BlockSize;
             long totalBytes = readStream.Length - readStream.Position;
             long blockCount = totalBytes / CryptoUtils.BlockSize;
             long partCount = blockCount / bufferBlockSize;
@@ -283,7 +277,7 @@ namespace Kuznyechik
 
             byte paddingLength = (byte)(CryptoUtils.BlockSize - totalBytes % CryptoUtils.BlockSize);
 
-            Span<byte> buffer = new byte[bufferLength];
+            Span<byte> buffer = new byte[this.bufferLength];
 
             for (; partCount > 0; partCount--)
             {
@@ -321,7 +315,7 @@ namespace Kuznyechik
         }
 
         /// <summary>
-        /// Выполнение расшифровывания на устройстве.
+        /// Выполнение расшифровывания.
         /// </summary>
         /// <param name="readStream">Поток данных.</param>
         /// <param name="writeStream">Поток преобразованных данных.</param>
@@ -335,13 +329,13 @@ namespace Kuznyechik
         {
             progress ??= new Progress<CryptoStatus>();
 
-            uint bufferBlockSize = bufferLength / CryptoUtils.BlockSize;
+            uint bufferBlockSize = this.bufferLength / CryptoUtils.BlockSize;
             long totalBytes = readStream.Length - readStream.Position;
             long blockCount = totalBytes / CryptoUtils.BlockSize - 1;
             long partCount = blockCount / bufferBlockSize;
             int leftBlockCount = (int)(blockCount - partCount * bufferBlockSize);
 
-            Span<byte> buffer = new byte[bufferLength];
+            Span<byte> buffer = new byte[this.bufferLength];
 
             for (; partCount > 0; partCount--)
             {
@@ -385,7 +379,7 @@ namespace Kuznyechik
         /// <param name="readStream">Поток данных.</param>
         /// <param name="writeStream">Поток преобразованных данных.</param>
         /// <param name="buffer">Буфер.</param>
-        /// <param name="action">Действие</param>
+        /// <param name="action">Делегат для зашифровывания или расшифрования блока.</param>
         /// <param name="progress">Прогресс операции.</param>
         /// <param name="cancellationToken">Токен отмены операции.</param>
         private void ProcessBuffer(
@@ -409,7 +403,7 @@ namespace Kuznyechik
 
             writeStream.Write(buffer);
 
-            CryptoStatus status = new CryptoStatus(readStream.Position, readStream.Length, CryptoUtils.BlockSize);
+            CryptoStatus status = new CryptoStatus(readStream.Position, readStream.Length, this.bufferLength);
             progress.Report(status);
         }
     }

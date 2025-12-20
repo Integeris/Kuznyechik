@@ -25,14 +25,14 @@ namespace Kuznyechik
         internal const byte RoundKeysLength = 10;
 
         /// <summary>
-        /// Делегат для вызова методов шифрования и расшифровывания.
+        /// Делегат для вызова методов зашифровывания и расшифровывания.
         /// </summary>
         /// <param name="block">Блок.</param>
         /// <param name="parameters">Параметры.</param>
         internal delegate void CryptBlockDelegate(ref Block block, in CryptoParameters parameters);
 
         /// <summary>
-        /// Шифрование блока.
+        /// Зашифровывание блока.
         /// </summary>
         /// <param name="block">Блок.</param>
         /// <param name="parameters">Параметры.</param>
@@ -42,7 +42,7 @@ namespace Kuznyechik
 
             for (int i = 0; i <= 8; i++)
             {
-                ref Block key = ref keys[i];
+                scoped ref Block key = ref keys[i];
                 block.Xor(key);
                 ReplaceBytes(ref block, parameters.ReplaceBytes);
                 LinearTransformEncrypt(ref block, parameters);
@@ -64,7 +64,7 @@ namespace Kuznyechik
 
             for (int i = 8; i >= 0; i--)
             {
-                ref Block key = ref keys[i];
+                scoped ref Block key = ref keys[i];
 
                 LinearTransformDecrypt(ref block, parameters);
                 ReplaceBytes(ref block, parameters.ReverseReplaceBytes);
@@ -79,18 +79,18 @@ namespace Kuznyechik
         /// <param name="replaceBytes">таблица для нелинейного преобразования.</param>
         internal static unsafe void ReplaceBytes(ref Block block, in ReadOnlySpan<byte> replaceBytes)
         {
-            ref byte blockPtr = ref Unsafe.As<Block, byte>(ref block);
-            ref byte replaceBytesPtr = ref MemoryMarshal.GetReference(replaceBytes);
+            scoped ref byte blockPtr = ref Unsafe.As<Block, byte>(ref block);
+            scoped ref byte replaceBytesPtr = ref MemoryMarshal.GetReference(replaceBytes);
 
             for (int i = 0; i < BlockSize; i++)
             {
-                ref byte currentByte = ref Unsafe.Add(ref blockPtr, i);
+                scoped ref byte currentByte = ref Unsafe.Add(ref blockPtr, i);
                 currentByte = Unsafe.Add(ref replaceBytesPtr, currentByte);
             }
         }
 
         /// <summary>
-        /// Шифрование блока.
+        /// Линейное преобразование блока.
         /// </summary>
         /// <param name="block">Блок.</param>
         /// <param name="parameters">Параметры.</param>
@@ -109,7 +109,7 @@ namespace Kuznyechik
         /// <param name="parameters">Параметры.</param>
         private static unsafe void TransformBlock(ref Block block, in CryptoParameters parameters)
         {
-            ref readonly GaloisTable galoisTable = ref parameters.GaloisTable;
+            scoped ref readonly GaloisTable galoisTable = ref parameters.GaloisTable;
             byte copyLength = BlockSize - 1;
 
             fixed (byte* blockPtr = &Unsafe.As<Block, byte>(ref block))
@@ -144,7 +144,7 @@ namespace Kuznyechik
         /// <param name="parameters">Параметры.</param>
         private static unsafe void ReverseTransformBlock(ref Block block, in CryptoParameters parameters)
         {
-            ref readonly GaloisTable galoisTable = ref parameters.GaloisTable;
+            scoped ref readonly GaloisTable galoisTable = ref parameters.GaloisTable;
             byte copyLength = BlockSize - 1;
 
             fixed (byte* blockPtr = &Unsafe.As<Block, byte>(ref block))

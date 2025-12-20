@@ -11,7 +11,7 @@ namespace Kuznyechik
     internal unsafe struct GaloisTable
     {
         /// <summary>
-        /// Предвычесленные значения.
+        /// Предвычисленные значения.
         /// </summary>
         private fixed byte data[4096];
 

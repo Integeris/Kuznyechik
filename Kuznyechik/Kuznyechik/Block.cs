@@ -33,7 +33,7 @@ namespace Kuznyechik
         /// Сравнение двух блоков.
         /// </summary>
         /// <param name="other">Сравниваемый блок.</param>
-        /// <returns>Одинаковый ли объект.</returns>
+        /// <returns>Равны ли объекты.</returns>
         public readonly bool Equals(Block other)
         {
             return other.low == this.low && other.high == this.high;
@@ -50,7 +50,7 @@ namespace Kuznyechik
         }
 
         /// <summary>
-        /// Получение хещ-кода блока.
+        /// Получение хеш-кода блока.
         /// </summary>
         /// <returns>Хеш-код.</returns>
         public override readonly int GetHashCode()
@@ -158,7 +158,7 @@ namespace Kuznyechik
             }
             else if (data.Length != CryptoUtils.BlockSize)
             {
-                throw new ArgumentException("Массив должен содержать 16 байт");
+                throw new ArgumentException("Размер массива должен быть равен 16 байтам.");
             }
 
             return Unsafe.As<byte, Block>(ref MemoryMarshal.GetReference<byte>(data));
@@ -194,12 +194,12 @@ namespace Kuznyechik
         public static implicit operator byte[](Block block)
         {
             byte[] result = new byte[CryptoUtils.BlockSize];
-            MemoryMarshal.Write(result, ref block.low);
+            MemoryMarshal.Write(result, ref block);
             return result;
         }
 
         /// <summary>
-        /// Получение байта по индексу.
+        /// Получение или установка байта по указанному индексу.
         /// </summary>
         /// <param name="index">Индекс.</param>
         /// <returns>Байт по индексу.</returns>

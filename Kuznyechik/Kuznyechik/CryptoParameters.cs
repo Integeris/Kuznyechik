@@ -71,7 +71,7 @@ namespace Kuznyechik
         /// <summary>
         /// Байты линейной трансформации.
         /// </summary>
-        public ReadOnlySpan<byte> LinearTransformationByte
+        public ReadOnlySpan<byte> LinearTransformationBytes
         {
             get => this.linearTransformation.AsSpan();
         }
@@ -143,7 +143,7 @@ namespace Kuznyechik
         /// <summary>
         /// Создание параметров для работы алгоритма.
         /// </summary>
-        /// <param name="key">Ключ шифрования.</param>
+        /// <param name="key">Ключ зашифровывания.</param>
         public unsafe CryptoParameters(ReadOnlySpan<byte> key = default)
         {
             this.replaceBytes = new byte[]
@@ -218,7 +218,7 @@ namespace Kuznyechik
                 0xD6, 0x20, 0x0A, 0x08, 0x00, 0x4C, 0xD7, 0x74
             };
 
-            Span<byte> span = stackalloc byte[]
+            scoped Span<byte> span = stackalloc byte[]
             {
                 1, 148, 32, 133, 16, 194, 192, 1,
                 251, 1, 192, 194, 16, 133, 32, 148
@@ -284,7 +284,7 @@ namespace Kuznyechik
         /// <summary>
         /// Создание параметров для работы алгоритма.
         /// </summary>
-        /// <param name="key">Ключ шифрования.</param>
+        /// <param name="key">Ключ зашифровывания.</param>
         /// <param name="replaceBytes">Таблица для нелинейного преобразования.</param>
         /// <param name="reverseReplaceBytes">Таблица для обратного нелинейного преобразования.</param>
         /// <param name="linearTransformation">Байты линейной трансформации.</param>
@@ -298,11 +298,11 @@ namespace Kuznyechik
         {
             if (replaceBytes.IsEmpty)
             {
-                throw new ArgumentNullException(nameof(replaceBytes), "Таблица для нелинейнонго преобразования не может быть пустой.");
+                throw new ArgumentNullException(nameof(replaceBytes), "Таблица для нелинейного преобразования не может быть пустой.");
             }
             else if (reverseReplaceBytes.IsEmpty)
             {
-                throw new ArgumentNullException(nameof(reverseReplaceBytes), "Таблица для обратного нелинейнонго преобразования не может быть пустой.");
+                throw new ArgumentNullException(nameof(reverseReplaceBytes), "Таблица для обратного нелинейного преобразования не может быть пустой.");
             }
             else if (linearTransformation.IsEmpty)
             {
@@ -326,7 +326,7 @@ namespace Kuznyechik
             }
             else if (constants.Length != 512)
             {
-                throw new ArgumentException($"Массив констант должен быть длинной 512 байт.", nameof(constants));
+                throw new ArgumentException($"Массив констант должен иметь длину 512 байт.", nameof(constants));
             }
 
             replaceBytes.CopyTo(this.replaceBytes);
@@ -357,11 +357,11 @@ namespace Kuznyechik
         {
             if (newKey.IsEmpty)
             {
-                throw new ArgumentException("Ключ не может быть пустым.", nameof(this.key));
+                throw new ArgumentException("Ключ не может быть пустым.", nameof(newKey));
             }
             else if (newKey.Length != CryptoUtils.KeySize)
             {
-                throw new ArgumentOutOfRangeException(nameof(this.key), $"Длина ключа должна быть {CryptoUtils.KeySize} байт.");
+                throw new ArgumentOutOfRangeException(nameof(newKey), $"Длина ключа должна быть {CryptoUtils.KeySize} байт.");
             }
 
             this.key = newKey.ToImmutableArray();

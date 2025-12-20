@@ -1,31 +1,31 @@
 ﻿namespace Kuznyechik
 {
     /// <summary>
-    /// Статус выполнения шифрования или расшифрования.
+    /// Статус выполнения зашифровывания или расшифрования.
     /// </summary>
     public struct CryptoStatus
     {
         /// <summary>
-        /// Позиция данных.
+        /// Позиция данных в байтах.
         /// </summary>
         public long DataPosition { get; set; }
 
         /// <summary>
-        /// Длина данных.
+        /// Длина данных в байтах.
         /// </summary>
         public long DataLength { get; set; }
 
         /// <summary>
-        /// Размер буфера.
+        /// Размер буфера в байтах.
         /// </summary>
         public long BufferLength { get; set; }
 
         /// <summary>
-        /// Создание статуса выполнения шифрования или расшифрования.
+        /// Создание статуса выполнения зашифровывания или расшифрования.
         /// </summary>
-        /// <param name="dataPosition">Позиция данных.</param>
-        /// <param name="dataLength">Длина данных.</param>
-        /// <param name="bufferLength">Размер буфера.</param>
+        /// <param name="dataPosition">Позиция данных в байтах.</param>
+        /// <param name="dataLength">Длина данных в байтах.</param>
+        /// <param name="bufferLength">Размер буфера в байтах.</param>
         public CryptoStatus(long dataPosition, long dataLength, long bufferLength)
         {
             this.DataPosition = dataPosition;
