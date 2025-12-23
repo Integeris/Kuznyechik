@@ -155,7 +155,8 @@ namespace Kuznyechik
         /// <exception cref="ArgumentException"></exception>
         public void Decrypt(Stream readStream, Stream writeStream)
         {
-            this.CheckDecryptStream(readStream, writeStream);
+            this.CheckStreams(readStream, writeStream);
+            this.CheckDecryptStream(readStream);
             this.DecryptProcess(readStream, writeStream);
         }
 
@@ -196,7 +197,8 @@ namespace Kuznyechik
         {
             await Task.Run(() =>
             {
-                this.CheckDecryptStream(readStream, writeStream);
+                this.CheckStreams(readStream, writeStream);
+                this.CheckDecryptStream(readStream);
 
                 this.DecryptProcess(
                     readStream,
@@ -236,9 +238,8 @@ namespace Kuznyechik
         /// Проверка потоков.
         /// </summary>
         /// <param name="readStream">Поток для чтения данных.</param>
-        /// <param name="writeStream">Поток для записи.</param>
         /// <exception cref="ArgumentException"></exception>
-        private void CheckDecryptStream(Stream readStream, Stream writeStream)
+        private void CheckDecryptStream(Stream readStream)
         {
             if (readStream.Length == 0)
             {
@@ -250,8 +251,6 @@ namespace Kuznyechik
                 throw new ArgumentException("Некорректный размер потока для чтения данных: размер должен быть кратен размеру блока.",
                     nameof(readStream));
             }
-
-            this.CheckStreams(readStream, writeStream);
         }
 
         /// <summary>
