@@ -87,7 +87,10 @@ namespace Kuznyechik
         /// <exception cref="ArgumentException"></exception>
         public void Encrypt(Stream readStream, Stream writeStream)
         {
-            this.EncryptProcess(readStream, writeStream);
+            this.CheckStreams(readStream, writeStream);
+
+            TaskAwaiter awaiter = this.EncryptProcessAsync(readStream, writeStream).GetAwaiter();
+            awaiter.GetResult();
         }
 
         /// <summary>
@@ -106,7 +109,8 @@ namespace Kuznyechik
             using (MemoryStream readStream = new MemoryStream(arr, 0, arr.Length))
             using (MemoryStream writeStream = new MemoryStream())
             {
-                await this.EncryptAsync(readStream, writeStream, progress, cancellationToken);
+                await this.EncryptAsync(readStream, writeStream, progress, cancellationToken)
+                    .ConfigureAwait(false);
                 return writeStream.ToArray();
             }
         }
@@ -119,17 +123,20 @@ namespace Kuznyechik
         /// <param name="progress">Прогресс зашифровывания.</param>
         /// <param name="cancellationToken">Токен отмены операции.</param>
         /// <returns>Задача зашифровывания.</returns>
-        public async Task EncryptAsync(
+        public Task EncryptAsync(
             Stream readStream,
             Stream writeStream,
             IProgress<CryptoStatus> progress = default,
             CancellationToken cancellationToken = default)
         {
-            await Task.Run(() => this.EncryptProcess(
-                readStream,
-                writeStream,
-                progress,
-                cancellationToken));
+            this.CheckStreams(readStream, writeStream);
+
+            return Task.Run(async () => 
+                await this.EncryptProcessAsync(
+                    readStream,
+                    writeStream,
+                    progress,
+                    cancellationToken), cancellationToken);
         }
 
         /// <summary>
@@ -157,7 +164,9 @@ namespace Kuznyechik
         {
             this.CheckStreams(readStream, writeStream);
             this.CheckDecryptStream(readStream);
-            this.DecryptProcess(readStream, writeStream);
+
+            TaskAwaiter awaiter = this.DecryptProcessAsync(readStream, writeStream).GetAwaiter();
+            awaiter.GetResult();
         }
 
         /// <summary>
@@ -175,7 +184,8 @@ namespace Kuznyechik
             using (MemoryStream readStream = new MemoryStream(arr, 0, arr.Length))
             using (MemoryStream writeStream = new MemoryStream())
             {
-                await this.DecryptAsync(readStream, writeStream, progress, cancellationToken);
+                await this.DecryptAsync(readStream, writeStream, progress, cancellationToken)
+                    .ConfigureAwait(false);
                 return writeStream.ToArray();
             }
         }
@@ -189,23 +199,21 @@ namespace Kuznyechik
         /// <param name="cancellationToken">Токен отмены операции.</param>
         /// <returns>Задача расшифровки.</returns>
         /// <exception cref="ArgumentException"></exception>
-        public async Task DecryptAsync(
+        public Task DecryptAsync(
             Stream readStream,
             Stream writeStream,
             IProgress<CryptoStatus> progress = default,
             CancellationToken cancellationToken = default)
         {
-            await Task.Run(() =>
-            {
-                this.CheckStreams(readStream, writeStream);
-                this.CheckDecryptStream(readStream);
+            this.CheckStreams(readStream, writeStream);
+            this.CheckDecryptStream(readStream);
 
-                this.DecryptProcess(
+            return Task.Run(async () => 
+                await this.DecryptProcessAsync(
                     readStream,
                     writeStream,
                     progress,
-                    cancellationToken);
-            });
+                    cancellationToken), cancellationToken);
         }
 
         /// <summary>
@@ -260,7 +268,7 @@ namespace Kuznyechik
         /// <param name="writeStream">Поток преобразованных данных.</param>
         /// <param name="progress">Прогресс операции.</param>
         /// <param name="cancellationToken">Токен отмены операции.</param>
-        private void EncryptProcess(
+        private async Task EncryptProcessAsync(
             Stream readStream,
             Stream writeStream,
             IProgress<CryptoStatus> progress = default,
@@ -276,14 +284,14 @@ namespace Kuznyechik
 
             byte paddingLength = (byte)(CryptoUtils.BlockSize - totalBytes % CryptoUtils.BlockSize);
 
-            Span<byte> buffer = new byte[this.bufferLength];
+            Memory<byte> buffer = new byte[this.bufferLength];
 
             for (; partCount > 0; partCount--)
             {
-                this.ProcessBuffer(
+                await this.ProcessBufferAsync(
                     readStream,
                     writeStream,
-                    ref buffer,
+                    buffer,
                     CryptoUtils.EncryptBlock,
                     progress,
                     cancellationToken);
@@ -291,23 +299,23 @@ namespace Kuznyechik
 
             buffer = new byte[leftBlockCount * CryptoUtils.BlockSize];
 
-            this.ProcessBuffer(
+            await this.ProcessBufferAsync(
                 readStream,
                 writeStream,
-                ref buffer,
+                buffer,
                 CryptoUtils.EncryptBlock,
                 progress,
                 cancellationToken);
 
             buffer = new byte[CryptoUtils.BlockSize];
-            readStream.Read(buffer);
+            await readStream.ReadAsync(buffer, cancellationToken);
 
-            buffer[^1] = paddingLength;
+            buffer.Span[^1] = paddingLength;
 
-            ref Block block = ref Unsafe.As<byte, Block>(ref MemoryMarshal.GetReference(buffer));
+            ref Block block = ref Unsafe.As<byte, Block>(ref MemoryMarshal.GetReference(buffer.Span));
             CryptoUtils.EncryptBlock(ref block, this.parameters);
 
-            writeStream.Write(buffer);
+            await writeStream.WriteAsync(buffer, cancellationToken);
 
             CryptoStatus status = new CryptoStatus(readStream.Position, readStream.Length, CryptoUtils.BlockSize);
             progress.Report(status);
@@ -320,7 +328,7 @@ namespace Kuznyechik
         /// <param name="writeStream">Поток преобразованных данных.</param>
         /// <param name="progress">Прогресс операции.</param>
         /// <param name="cancellationToken">Токен отмены операции.</param>
-        private void DecryptProcess(
+        private async Task DecryptProcessAsync(
             Stream readStream,
             Stream writeStream,
             IProgress<CryptoStatus> progress = default,
@@ -334,14 +342,14 @@ namespace Kuznyechik
             long partCount = blockCount / bufferBlockSize;
             int leftBlockCount = (int)(blockCount - partCount * bufferBlockSize);
 
-            Span<byte> buffer = new byte[this.bufferLength];
+            Memory<byte> buffer = new byte[this.bufferLength];
 
             for (; partCount > 0; partCount--)
             {
-                this.ProcessBuffer(
+                await this.ProcessBufferAsync(
                     readStream,
                     writeStream,
-                    ref buffer,
+                    buffer,
                     CryptoUtils.DecryptBlock,
                     progress,
                     cancellationToken);
@@ -349,24 +357,24 @@ namespace Kuznyechik
 
             buffer = new byte[leftBlockCount * CryptoUtils.BlockSize];
 
-            this.ProcessBuffer(
+            await this.ProcessBufferAsync(
                 readStream,
                 writeStream,
-                ref buffer,
+                buffer,
                 CryptoUtils.DecryptBlock,
                 progress,
                 cancellationToken);
 
             buffer = new byte[CryptoUtils.BlockSize];
-            readStream.Read(buffer);
+            await readStream.ReadAsync(buffer, cancellationToken);
 
-            ref Block block = ref Unsafe.As<byte, Block>(ref MemoryMarshal.GetReference(buffer));
+            ref Block block = ref Unsafe.As<byte, Block>(ref MemoryMarshal.GetReference(buffer.Span));
 
             CryptoUtils.DecryptBlock(ref block, this.parameters);
 
-            byte paddingLength = buffer[^1];
+            byte paddingLength = buffer.Span[^1];
 
-            writeStream.Write(buffer[..(CryptoUtils.BlockSize - paddingLength)]);
+            await writeStream.WriteAsync(buffer[..(CryptoUtils.BlockSize - paddingLength)], cancellationToken);
 
             CryptoStatus status = new CryptoStatus(readStream.Position, readStream.Length, CryptoUtils.BlockSize);
             progress.Report(status);
@@ -381,26 +389,26 @@ namespace Kuznyechik
         /// <param name="action">Делегат для зашифровывания или расшифрования блока.</param>
         /// <param name="progress">Прогресс операции.</param>
         /// <param name="cancellationToken">Токен отмены операции.</param>
-        private void ProcessBuffer(
+        private async Task ProcessBufferAsync(
             Stream readStream,
             Stream writeStream,
-            ref Span<byte> buffer,
+            Memory<byte> buffer,
             CryptBlockDelegate action,
             IProgress<CryptoStatus> progress,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            readStream.Read(buffer);
+            await readStream.ReadAsync(buffer, cancellationToken);
 
-            Span<Block> blocks = MemoryMarshal.Cast<byte, Block>(buffer);
+            Span<Block> blocks = MemoryMarshal.Cast<byte, Block>(buffer.Span);
 
             for (int i = 0; i < blocks.Length; i++)
             {
                 action.Invoke(ref blocks[i], this.parameters);
             }
 
-            writeStream.Write(buffer);
+            await writeStream.WriteAsync(buffer, cancellationToken);
 
             CryptoStatus status = new CryptoStatus(readStream.Position, readStream.Length, this.bufferLength);
             progress.Report(status);
