@@ -15,7 +15,7 @@
     <Company />
     <PackageTags>Kuznyechik;Cryptography;Encryption;GOST;GOST 34.12-2015;GOST 34.12-2018;ГОСТ 34.12-2015;ГОСТ 34.12-2018</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <Version>1.1.1</Version>
+    <Version>1.1.2</Version>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
@@ -40,7 +40,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Collections.Immutable" Version="9.0.10" />
+    <PackageReference Include="System.Collections.Immutable" Version="10.0.1" />
   </ItemGroup>
 
 </Project>
