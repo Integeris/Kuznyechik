@@ -99,7 +99,7 @@ namespace KuznyechikTests
             stopwatch.Restart();
             scrambler.Decrypt(ref arrCopy);
             stopwatch.Stop();
-            Console.WriteLine("Расшифоровывание закончено за: {0}", stopwatch.Elapsed);
+            Console.WriteLine("Расшифровывание закончено за: {0}", stopwatch.Elapsed);
 
             Assert.IsTrue(arr.SequenceEqual(arrCopy));
         }
@@ -225,7 +225,6 @@ namespace KuznyechikTests
             CancellationTokenSource cancellationToken = new CancellationTokenSource();
             Task task = scrambler.EncryptAsync(arr, progress, cancellationToken.Token);
 
-            cancellationToken.CancelAfter(10000);
             task.Wait();
 
             Assert.IsTrue(true);
