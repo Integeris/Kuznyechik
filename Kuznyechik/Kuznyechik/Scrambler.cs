@@ -87,7 +87,7 @@ namespace Kuznyechik
         /// <exception cref="ArgumentException"></exception>
         public void Encrypt(Stream readStream, Stream writeStream)
         {
-            this.CheckStreams(readStream, writeStream);
+            CheckStreams(readStream, writeStream);
 
             TaskAwaiter awaiter = this.EncryptProcessAsync(readStream, writeStream).GetAwaiter();
             awaiter.GetResult();
@@ -129,7 +129,7 @@ namespace Kuznyechik
             IProgress<CryptoStatus> progress = default,
             CancellationToken cancellationToken = default)
         {
-            this.CheckStreams(readStream, writeStream);
+            CheckStreams(readStream, writeStream);
 
             return Task.Run(async () => 
                 await this.EncryptProcessAsync(
@@ -162,8 +162,8 @@ namespace Kuznyechik
         /// <exception cref="ArgumentException"></exception>
         public void Decrypt(Stream readStream, Stream writeStream)
         {
-            this.CheckStreams(readStream, writeStream);
-            this.CheckDecryptStream(readStream);
+            CheckStreams(readStream, writeStream);
+            CheckDecryptStream(readStream);
 
             TaskAwaiter awaiter = this.DecryptProcessAsync(readStream, writeStream).GetAwaiter();
             awaiter.GetResult();
@@ -205,8 +205,8 @@ namespace Kuznyechik
             IProgress<CryptoStatus> progress = default,
             CancellationToken cancellationToken = default)
         {
-            this.CheckStreams(readStream, writeStream);
-            this.CheckDecryptStream(readStream);
+            CheckStreams(readStream, writeStream);
+            CheckDecryptStream(readStream);
 
             return Task.Run(async () => 
                 await this.DecryptProcessAsync(
@@ -222,7 +222,7 @@ namespace Kuznyechik
         /// <param name="readStream">Поток для чтения данных.</param>
         /// <param name="writeStream">Поток для записи.</param>
         /// <exception cref="ArgumentException"></exception>
-        private void CheckStreams(Stream readStream, Stream writeStream)
+        private static void CheckStreams(Stream readStream, Stream writeStream)
         {
             if (readStream == null)
             {
@@ -247,7 +247,7 @@ namespace Kuznyechik
         /// </summary>
         /// <param name="readStream">Поток для чтения данных.</param>
         /// <exception cref="ArgumentException"></exception>
-        private void CheckDecryptStream(Stream readStream)
+        private static void CheckDecryptStream(Stream readStream)
         {
             if (readStream.Length == 0)
             {
@@ -308,7 +308,7 @@ namespace Kuznyechik
                 cancellationToken);
 
             buffer = new byte[CryptoUtils.BlockSize];
-            await readStream.ReadAsync(buffer, cancellationToken);
+            _ = await readStream.ReadAsync(buffer, cancellationToken);
 
             buffer.Span[^1] = paddingLength;
 
@@ -366,7 +366,7 @@ namespace Kuznyechik
                 cancellationToken);
 
             buffer = new byte[CryptoUtils.BlockSize];
-            await readStream.ReadAsync(buffer, cancellationToken);
+            _ = await readStream.ReadAsync(buffer, cancellationToken);
 
             ref Block block = ref Unsafe.As<byte, Block>(ref MemoryMarshal.GetReference(buffer.Span));
 
@@ -399,7 +399,7 @@ namespace Kuznyechik
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            await readStream.ReadAsync(buffer, cancellationToken);
+            _ = await readStream.ReadAsync(buffer, cancellationToken);
 
             Span<Block> blocks = MemoryMarshal.Cast<byte, Block>(buffer.Span);
 

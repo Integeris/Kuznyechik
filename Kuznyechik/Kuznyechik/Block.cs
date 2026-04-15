@@ -75,7 +75,7 @@ namespace Kuznyechik
                 stringBuilder.Append(span[i]);
             }
 
-            stringBuilder.Append("]");
+            stringBuilder.Append(']');
             return stringBuilder.ToString();
         }
 
@@ -194,7 +194,7 @@ namespace Kuznyechik
         public static implicit operator byte[](Block block)
         {
             byte[] result = new byte[CryptoUtils.BlockSize];
-            MemoryMarshal.Write(result, ref block);
+            MemoryMarshal.Write(result, in block);
             return result;
         }
 

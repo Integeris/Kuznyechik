@@ -38,7 +38,7 @@ namespace Kuznyechik
         /// <returns>Представление таблицы.</returns>
         public readonly ReadOnlySpan<byte> AsSpan()
         {
-            return MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(this), 1));
+            return MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in this), 1));
         }
 
         /// <summary>
@@ -87,13 +87,13 @@ namespace Kuznyechik
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
-                ref byte arrPtr = ref Unsafe.As<GaloisTable, byte>(ref Unsafe.AsRef(this));
+                ref byte arrPtr = ref Unsafe.As<GaloisTable, byte>(ref Unsafe.AsRef(in this));
                 return Unsafe.Add(ref arrPtr, x * 16 + linearTransformationIndex);
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set
             {
-                ref byte arrPtr = ref Unsafe.As<GaloisTable, byte>(ref Unsafe.AsRef(this));
+                ref byte arrPtr = ref Unsafe.As<GaloisTable, byte>(ref Unsafe.AsRef(in this));
                 Unsafe.Add(ref arrPtr, x * 16 + linearTransformationIndex) = value;
             }
         }
