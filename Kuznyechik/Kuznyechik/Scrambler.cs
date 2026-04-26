@@ -56,7 +56,7 @@ namespace Kuznyechik
         /// <param name="parameters">Параметры шифратора</param>
         public Scrambler(CryptoParameters parameters)
         {
-            this.bufferLength = UInt16.MaxValue;
+            this.bufferLength = UInt16.MaxValue + 1;
             this.parameters = parameters ?? throw new ArgumentNullException(nameof(parameters));
         }
 
