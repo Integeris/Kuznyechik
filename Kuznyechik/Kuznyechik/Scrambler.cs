@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Buffers;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 using System.Threading;
 using System.Threading.Tasks;
 using static Kuznyechik.CryptoUtils;
@@ -54,7 +56,7 @@ namespace Kuznyechik
         /// <param name="parameters">Параметры шифратора</param>
         public Scrambler(CryptoParameters parameters)
         {
-            this.bufferLength = 65536;
+            this.bufferLength = UInt16.MaxValue;
             this.parameters = parameters ?? throw new ArgumentNullException(nameof(parameters));
         }
 
@@ -312,7 +314,7 @@ namespace Kuznyechik
 
             buffer.Span[^1] = paddingLength;
 
-            ref Block block = ref Unsafe.As<byte, Block>(ref MemoryMarshal.GetReference(buffer.Span));
+            Vector128<byte> block = Vector128.Create(buffer.Span);
             CryptoUtils.EncryptBlock(ref block, this.parameters);
 
             await writeStream.WriteAsync(buffer, cancellationToken);
@@ -368,8 +370,7 @@ namespace Kuznyechik
             buffer = new byte[CryptoUtils.BlockSize];
             _ = await readStream.ReadAsync(buffer, cancellationToken);
 
-            ref Block block = ref Unsafe.As<byte, Block>(ref MemoryMarshal.GetReference(buffer.Span));
-
+            Vector128<byte> block = Vector128.Create(buffer.Span);
             CryptoUtils.DecryptBlock(ref block, this.parameters);
 
             byte paddingLength = buffer.Span[^1];
@@ -401,7 +402,7 @@ namespace Kuznyechik
 
             _ = await readStream.ReadAsync(buffer, cancellationToken);
 
-            Span<Block> blocks = MemoryMarshal.Cast<byte, Block>(buffer.Span);
+            Span<Vector128<byte>> blocks = MemoryMarshal.Cast<byte, Vector128<byte>>(buffer.Span);
 
             for (int i = 0; i < blocks.Length; i++)
             {

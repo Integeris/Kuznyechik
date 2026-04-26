@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Immutable;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 
 namespace Kuznyechik
 {
@@ -27,17 +29,17 @@ namespace Kuznyechik
         /// <summary>
         /// Байты линейной трансформации.
         /// </summary>
-        private readonly Block linearTransformation;
+        private readonly Vector128<byte> linearTransformation;
 
         /// <summary>
         /// Константы для расчётов.
         /// </summary>
-        private readonly Block[] constants;
+        private readonly Vector128<byte>[] constants;
 
         /// <summary>
         /// Раундовые ключи.
         /// </summary>
-        private readonly Block[] keys;
+        private readonly Vector128<byte>[] keys;
 
         /// <summary>
         /// Ключ.
@@ -73,7 +75,13 @@ namespace Kuznyechik
         /// </summary>
         public ReadOnlySpan<byte> LinearTransformationBytes
         {
-            get => this.linearTransformation.AsSpan();
+            get
+            {
+                ref Vector128<byte> refVector = ref Unsafe.AsRef(in this.linearTransformation);
+                Span<Vector128<byte>> vectorSpan = MemoryMarshal.CreateSpan(ref refVector, 1);
+
+                return MemoryMarshal.AsBytes(vectorSpan);
+            }
         }
 
         /// <summary>
@@ -127,7 +135,7 @@ namespace Kuznyechik
         /// <summary>
         /// Байты линейной трансформации.
         /// </summary>
-        internal ref readonly Block LinearTransformation
+        internal ref readonly Vector128<byte> LinearTransformation
         {
             get => ref this.linearTransformation;
         }
@@ -135,7 +143,7 @@ namespace Kuznyechik
         /// <summary>
         /// Раундовые ключи.
         /// </summary>
-        internal Block[] Keys
+        internal Vector128<byte>[] Keys
         {
             get => this.keys;
         }
@@ -218,59 +226,47 @@ namespace Kuznyechik
                 0xD6, 0x20, 0x0A, 0x08, 0x00, 0x4C, 0xD7, 0x74
             };
 
-            scoped Span<byte> span = stackalloc byte[]
-            {
+            this.linearTransformation = Vector128.Create(
                 1, 148, 32, 133, 16, 194, 192, 1,
-                251, 1, 192, 194, 16, 133, 32, 148
+                251, 1, 192, 194, 16, 133, 32, 148);
+
+            this.constants = new Vector128<byte>[32]
+            {
+                Vector128.Create(1, 148, 132, 221, 16, 189, 39, 93, 184, 122, 72, 108, 114, 118, 162, 110),
+                Vector128.Create(2, 235, 203, 121, 32, 185, 78, 186, 179, 244, 144, 216, 228, 236, 135, 220),
+                Vector128.Create(3, 127, 79, 164, 48, 4, 105, 231, 11, 142, 216, 180, 150, 154, 37, 178),
+                Vector128.Create(4, 21, 85, 242, 64, 177, 156, 183, 165, 43, 227, 115, 11, 27, 205, 123),
+                Vector128.Create(5, 129, 209, 47, 80, 12, 187, 234, 29, 81, 171, 31, 121, 109, 111, 21),
+                Vector128.Create(6, 254, 158, 139, 96, 8, 210, 13, 22, 223, 115, 171, 239, 247, 74, 167),
+                Vector128.Create(7, 106, 26, 86, 112, 181, 245, 80, 174, 165, 59, 199, 157, 129, 232, 201),
+                Vector128.Create(8, 42, 170, 39, 128, 161, 251, 173, 137, 86, 5, 230, 22, 54, 89, 246),
+                Vector128.Create(9, 190, 46, 250,144, 28, 220, 240, 49, 44, 77, 138, 100, 64, 251, 152),
+                Vector128.Create(10, 193, 97, 94, 160, 24, 181, 23, 58, 162, 149, 62, 242, 218, 222, 42),
+                Vector128.Create(11, 85, 229, 131, 176, 165, 146, 74, 130, 216, 221, 82, 128, 172, 124, 68),
+                Vector128.Create(12, 63, 255, 213, 192, 16, 103, 26, 44, 125, 230, 149, 29, 45, 148, 141),
+                Vector128.Create(13, 171, 123, 8, 208, 173, 64, 71, 148, 7, 174, 249, 111, 91, 54, 227),
+                Vector128.Create(14, 212, 52, 172, 224, 169, 41, 160, 159, 137, 118, 77, 249, 193, 19, 81),
+                Vector128.Create(15, 64, 176, 113, 240, 20, 14, 253, 39, 243, 62, 33, 139, 183, 177, 63),
+                Vector128.Create(16, 84, 151, 78, 195, 129, 53, 153, 209, 172, 10, 15, 44, 108, 178, 47),
+                Vector128.Create(17, 192, 19, 147, 211, 60, 18, 196, 105, 214, 66, 99, 94, 26, 16, 65),
+                Vector128.Create(18, 191, 92, 55, 227, 56, 123, 35, 98, 88, 154, 215, 200, 128, 53, 243),
+                Vector128.Create(19, 43, 216, 234, 243, 133, 92, 126, 218, 34, 210, 187, 186, 246, 151, 157),
+                Vector128.Create(20, 65, 194, 188, 131, 48, 169, 46, 116, 135, 233, 124, 39, 119, 127, 84),
+                Vector128.Create(21, 213, 70, 97, 147, 141, 142, 115, 204, 253, 161, 16, 85, 1, 221, 58),
+                Vector128.Create(22, 170, 9, 197, 163, 137, 231, 148, 199, 115, 121, 164, 195, 155, 248, 136),
+                Vector128.Create(23, 62, 141, 24, 179, 52, 192, 201, 127, 9, 49, 200, 177, 237, 90, 230),
+                Vector128.Create(24, 126, 61, 105, 67, 32, 206, 52, 88, 250, 15, 233, 58, 90, 235, 217),
+                Vector128.Create(25, 234, 185, 180, 83, 157, 233, 105, 224, 128, 71, 133, 72, 44, 73, 183),
+                Vector128.Create(26, 149, 246, 16, 99, 153, 128, 142, 235, 14, 159, 49, 222, 182, 108, 5),
+                Vector128.Create(27, 1, 114, 205, 115, 36, 167, 211, 83, 116, 215, 93, 172, 192, 206, 107),
+                Vector128.Create(28, 107, 104, 155, 3, 145, 82, 131, 253, 209, 236, 154, 49, 65, 38, 162),
+                Vector128.Create(29, 255, 236, 70, 19, 44, 117, 222, 69, 171, 164, 246, 67, 55, 132, 204),
+                Vector128.Create(30, 128, 163, 226, 35, 40, 28, 57, 78, 37, 124, 66, 213, 173, 161, 126),
+                Vector128.Create(31, 20, 39, 63, 51, 149, 59, 100, 246, 95, 52, 46, 167, 219, 3, 16),
+                Vector128.Create(32, 168, 237, 156, 69, 193, 106, 241, 97, 155, 20, 30, 88, 216, 167, 94)
             };
 
-            this.linearTransformation = span;
-
-            this.constants = new Block[32];
-
-            span = stackalloc byte[]
-            {
-                1, 148, 132, 221, 16, 189, 39, 93, 184, 122, 72, 108, 114, 118, 162, 110,
-                2, 235, 203, 121, 32, 185, 78, 186, 179, 244, 144, 216, 228, 236, 135, 220,
-                3, 127, 79, 164, 48, 4, 105, 231, 11, 142, 216, 180, 150, 154, 37, 178,
-                4, 21, 85, 242, 64, 177, 156, 183, 165, 43, 227, 115, 11, 27, 205, 123,
-                5, 129, 209, 47, 80, 12, 187, 234, 29, 81, 171, 31, 121, 109, 111, 21,
-                6, 254, 158, 139, 96, 8, 210, 13, 22, 223, 115, 171, 239, 247, 74, 167,
-                7, 106, 26, 86, 112, 181, 245, 80, 174, 165, 59, 199, 157, 129, 232, 201,
-                8, 42, 170, 39, 128, 161, 251, 173, 137, 86, 5, 230, 22, 54, 89, 246,
-                9, 190, 46, 250,144, 28, 220, 240, 49, 44, 77, 138, 100, 64, 251, 152,
-                10, 193, 97, 94, 160, 24, 181, 23, 58, 162, 149, 62, 242, 218, 222, 42,
-                11, 85, 229, 131, 176, 165, 146, 74, 130, 216, 221, 82, 128, 172, 124, 68,
-                12, 63, 255, 213, 192, 16, 103, 26, 44, 125, 230, 149, 29, 45, 148, 141,
-                13, 171, 123, 8, 208, 173, 64, 71, 148, 7, 174, 249, 111, 91, 54, 227,
-                14, 212, 52, 172, 224, 169, 41, 160, 159, 137, 118, 77, 249, 193, 19, 81,
-                15, 64, 176, 113, 240, 20, 14, 253, 39, 243, 62, 33, 139, 183, 177, 63,
-                16, 84, 151, 78, 195, 129, 53, 153, 209, 172, 10, 15, 44, 108, 178, 47,
-                17, 192, 19, 147, 211, 60, 18, 196, 105, 214, 66, 99, 94, 26, 16, 65,
-                18, 191, 92, 55, 227, 56, 123, 35, 98, 88, 154, 215, 200, 128, 53, 243,
-                19, 43, 216, 234, 243, 133, 92, 126, 218, 34, 210, 187, 186, 246, 151, 157,
-                20, 65, 194, 188, 131, 48, 169, 46, 116, 135, 233, 124, 39, 119, 127, 84,
-                21, 213, 70, 97, 147, 141, 142, 115, 204, 253, 161, 16, 85, 1, 221, 58,
-                22, 170, 9, 197, 163, 137, 231, 148, 199, 115, 121, 164, 195, 155, 248, 136,
-                23, 62, 141, 24, 179, 52, 192, 201, 127, 9, 49, 200, 177, 237, 90, 230,
-                24, 126, 61, 105, 67, 32, 206, 52, 88, 250, 15, 233, 58, 90, 235, 217,
-                25, 234, 185, 180, 83, 157, 233, 105, 224, 128, 71, 133, 72, 44, 73, 183,
-                26, 149, 246, 16, 99, 153, 128, 142, 235, 14, 159, 49, 222, 182, 108, 5,
-                27, 1, 114, 205, 115, 36, 167, 211, 83, 116, 215, 93, 172, 192, 206, 107,
-                28, 107, 104, 155, 3, 145, 82, 131, 253, 209, 236, 154, 49, 65, 38, 162,
-                29, 255, 236, 70, 19, 44, 117, 222, 69, 171, 164, 246, 67, 55, 132, 204,
-                30, 128, 163, 226, 35, 40, 28, 57, 78, 37, 124, 66, 213, 173, 161, 126,
-                31, 20, 39, 63, 51, 149, 59, 100, 246, 95, 52, 46, 167, 219, 3, 16,
-                32, 168, 237, 156, 69, 193, 106, 241, 97, 155, 20, 30, 88, 216, 167, 94
-            };
-
-            fixed (byte* srcPtr = span)
-            fixed (Block* destPtr = this.constants)
-            {
-                Buffer.MemoryCopy(srcPtr, destPtr, span.Length, span.Length);
-            }
-
-            this.keys = new Block[CryptoUtils.RoundKeysLength];
+            this.keys = new Vector128<byte>[CryptoUtils.RoundKeysLength];
 
             if (key.IsEmpty)
             {
@@ -332,17 +328,10 @@ namespace Kuznyechik
             replaceBytes.CopyTo(this.replaceBytes);
             reverseReplaceBytes.CopyTo(this.reverseReplaceBytes);
 
-            this.linearTransformation = linearTransformation;
-            this.galoisTable = new GaloisTable(linearTransformation);
+            this.linearTransformation = Vector128.Create(linearTransformation);
+            this.galoisTable = new GaloisTable(this.linearTransformation);
 
-            unsafe
-            {
-                fixed (byte* srcPtr = constants)
-                fixed (Block* destPtr = this.constants)
-                {
-                    Buffer.MemoryCopy(srcPtr, destPtr, constants.Length, constants.Length);
-                }
-            }
+            this.constants = MemoryMarshal.Cast<byte, Vector128<byte>>(constants).ToArray();
 
             this.GenerationRoundKeys();
         }
@@ -373,16 +362,16 @@ namespace Kuznyechik
         /// </summary>
         private void GenerationRoundKeys()
         {
-            this.keys[0] = this.key[..CryptoUtils.BlockSize].AsSpan();
-            this.keys[1] = this.key[CryptoUtils.BlockSize..].AsSpan();
+            this.keys[0] = Vector128.Create<byte>(this.key[..CryptoUtils.BlockSize].AsSpan());
+            this.keys[1] = Vector128.Create<byte>(this.key[CryptoUtils.BlockSize..].AsSpan());
 
             for (int i = 0; i < 4; i++)
             {
                 int firstIndex = i * 2 + 2;
                 int secondIndex = i * 2 + 3;
 
-                ref Block firstKey = ref this.keys[firstIndex];
-                ref Block secondKey = ref this.keys[secondIndex];
+                ref Vector128<byte> firstKey = ref this.keys[firstIndex];
+                ref Vector128<byte> secondKey = ref this.keys[secondIndex];
 
                 firstKey = this.keys[firstIndex - 2];
                 secondKey = this.keys[secondIndex - 2];
@@ -406,14 +395,14 @@ namespace Kuznyechik
         /// <param name="firstKey">Первый ключ.</param>
         /// <param name="secondKey">Второй ключ.</param>
         /// <param name="constant">Константа.</param>
-        private void FeistelCell(ref Block firstKey, ref Block secondKey, ref Block constant)
+        private void FeistelCell(ref Vector128<byte> firstKey, ref Vector128<byte> secondKey, ref Vector128<byte> constant)
         {
-            Block tmpKey = firstKey ^ constant;
+            Vector128<byte> tmpKey = firstKey ^ constant;
 
             CryptoUtils.ReplaceBytes(ref tmpKey, this.replaceBytes);
             CryptoUtils.LinearTransformEncrypt(ref tmpKey, this);
 
-            tmpKey.Xor(secondKey);
+            tmpKey ^= secondKey;
 
             secondKey = firstKey;
             firstKey = tmpKey;

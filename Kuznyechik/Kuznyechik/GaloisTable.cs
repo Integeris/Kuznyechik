@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 
 namespace Kuznyechik
 {
@@ -19,7 +20,7 @@ namespace Kuznyechik
         /// Создание таблицы предвычисленных значений поля Галуа.
         /// </summary>
         /// <param name="linearTransformation">Байты линейной трансформации.</param>
-        public GaloisTable(in Block linearTransformation)
+        public GaloisTable(in Vector128<byte> linearTransformation)
         {
             ref byte dataRef = ref Unsafe.As<GaloisTable, byte>(ref this);
 

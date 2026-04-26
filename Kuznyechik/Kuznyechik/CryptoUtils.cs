@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 
 namespace Kuznyechik
 {
@@ -29,26 +30,26 @@ namespace Kuznyechik
         /// </summary>
         /// <param name="block">Блок.</param>
         /// <param name="parameters">Параметры.</param>
-        internal delegate void CryptBlockDelegate(ref Block block, in CryptoParameters parameters);
+        internal delegate void CryptBlockDelegate(ref Vector128<byte> block, in CryptoParameters parameters);
 
         /// <summary>
         /// Зашифровывание блока.
         /// </summary>
         /// <param name="block">Блок.</param>
         /// <param name="parameters">Параметры.</param>
-        internal static void EncryptBlock(ref Block block, in CryptoParameters parameters)
+        internal static void EncryptBlock(ref Vector128<byte> block, in CryptoParameters parameters)
         {
-            Block[] keys = parameters.Keys;
+            Vector128<byte>[] keys = parameters.Keys;
 
             for (int i = 0; i <= 8; i++)
             {
-                scoped ref Block key = ref keys[i];
-                block.Xor(key);
+                scoped ref Vector128<byte> key = ref keys[i];
+                block ^= key;
                 ReplaceBytes(ref block, parameters.ReplaceBytes);
                 LinearTransformEncrypt(ref block, parameters);
             }
 
-            block.Xor(keys[9]);
+            block ^= keys[9];
         }
 
         /// <summary>
@@ -56,19 +57,19 @@ namespace Kuznyechik
         /// </summary>
         /// <param name="block">Блок.</param>
         /// <param name="parameters">Параметры.</param>
-        internal static void DecryptBlock(ref Block block, in CryptoParameters parameters)
+        internal static void DecryptBlock(ref Vector128<byte> block, in CryptoParameters parameters)
         {
-            Block[] keys = parameters.Keys;
+            Vector128<byte>[] keys = parameters.Keys;
 
-            block.Xor(keys[9]);
+            block ^= keys[9];
 
             for (int i = 8; i >= 0; i--)
             {
-                scoped ref Block key = ref keys[i];
+                scoped ref Vector128<byte> key = ref keys[i];
 
                 LinearTransformDecrypt(ref block, parameters);
                 ReplaceBytes(ref block, parameters.ReverseReplaceBytes);
-                block.Xor(key);
+                block ^= key;
             }
         }
 
@@ -77,9 +78,9 @@ namespace Kuznyechik
         /// </summary>
         /// <param name="block">Блок данных.</param>
         /// <param name="replaceBytes">таблица для нелинейного преобразования.</param>
-        internal static void ReplaceBytes(ref Block block, in ReadOnlySpan<byte> replaceBytes)
+        internal static void ReplaceBytes(ref Vector128<byte> block, in ReadOnlySpan<byte> replaceBytes)
         {
-            scoped ref byte blockPtr = ref Unsafe.As<Block, byte>(ref block);
+            scoped ref byte blockPtr = ref Unsafe.As<Vector128<byte>, byte>(ref block);
             scoped ref byte replaceBytesPtr = ref MemoryMarshal.GetReference(replaceBytes);
 
             for (int i = 0; i < BlockSize; i++)
@@ -94,12 +95,11 @@ namespace Kuznyechik
         /// </summary>
         /// <param name="block">Блок.</param>
         /// <param name="parameters">Параметры.</param>
-        internal static unsafe void LinearTransformEncrypt(ref Block block, in CryptoParameters parameters)
+        internal static unsafe void LinearTransformEncrypt(ref Vector128<byte> block, in CryptoParameters parameters)
         {
             scoped ref readonly GaloisTable galoisTable = ref parameters.GaloisTable;
-            const byte copyLength = BlockSize - 1;
 
-            fixed (byte* blockPtr = &Unsafe.As<Block, byte>(ref block))
+            fixed (byte* blockPtr = &Unsafe.As<Vector128<byte>, byte>(ref block))
             {
                 for (int i = 0; i < BlockSize; i++)
                 {
@@ -122,7 +122,7 @@ namespace Kuznyechik
                     sum ^= galoisTable[blockPtr[15], 15];
 
                     // Сдвигаем байты и записываем новое значение в конец
-                    Buffer.MemoryCopy(blockPtr + 1, blockPtr, copyLength, copyLength);
+                    Buffer.MemoryCopy(blockPtr + 1, blockPtr, 15, 15);
                     blockPtr[15] = sum;
                 }
             }
@@ -133,12 +133,11 @@ namespace Kuznyechik
         /// </summary>
         /// <param name="block">Блок.</param>
         /// <param name="parameters">Параметры.</param>
-        private static unsafe void LinearTransformDecrypt(ref Block block, in CryptoParameters parameters)
+        private static unsafe void LinearTransformDecrypt(ref Vector128<byte> block, in CryptoParameters parameters)
         {
             scoped ref readonly GaloisTable galoisTable = ref parameters.GaloisTable;
-            const byte copyLength = BlockSize - 1;
 
-            fixed (byte* blockPtr = &Unsafe.As<Block, byte>(ref block))
+            fixed (byte* blockPtr = &Unsafe.As<Vector128<byte>, byte>(ref block))
             {
                 for (int i = 0; i < BlockSize; i++)
                 {
@@ -146,7 +145,7 @@ namespace Kuznyechik
                     byte sum = blockPtr[15];
 
                     // Сдвигаем байты вправо (копируем с начала в конец со смещением)
-                    Buffer.MemoryCopy(blockPtr, blockPtr + 1, copyLength, copyLength);
+                    Buffer.MemoryCopy(blockPtr, blockPtr + 1, 15, 15);
 
                     // Применяем обратные преобразования с использованием таблицы Галуа
                     sum ^= galoisTable[blockPtr[15], 15];
