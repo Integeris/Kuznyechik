@@ -133,7 +133,7 @@ namespace Kuznyechik
         /// </summary>
         /// <param name="block">Блок.</param>
         /// <param name="parameters">Параметры.</param>
-        private static unsafe void LinearTransformDecrypt(ref Vector128<byte> block, in CryptoParameters parameters)
+        internal static unsafe void LinearTransformDecrypt(ref Vector128<byte> block, in CryptoParameters parameters)
         {
             scoped ref readonly GaloisTable galoisTable = ref parameters.GaloisTable;
 

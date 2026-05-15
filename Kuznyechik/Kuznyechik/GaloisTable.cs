@@ -98,14 +98,5 @@ namespace Kuznyechik
                 Unsafe.Add(ref arrPtr, x * 16 + linearTransformationIndex) = value;
             }
         }
-
-        /// <summary>
-        /// Неявное преобразование таблицы в ReadOnlySpan.
-        /// </summary>
-        /// <param name="table">Таблица предвычисленных значений поля Галуа.</param>
-        public static implicit operator ReadOnlySpan<byte>(GaloisTable table)
-        {
-            return table.AsSpan();
-        }
     }
 }
