@@ -135,3 +135,4 @@ catch (OperationCanceledException)
 - Uses structures for minimal memory allocation
 - Employs unsafe code for performance optimization
 - Thread-safe when using separate Scrambler instances
+- Uses a fast encryption method based on precomputed tables

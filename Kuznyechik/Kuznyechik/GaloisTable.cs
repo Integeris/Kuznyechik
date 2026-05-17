@@ -88,14 +88,14 @@ namespace Kuznyechik
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
-                ref byte arrPtr = ref Unsafe.As<GaloisTable, byte>(ref Unsafe.AsRef(in this));
-                return Unsafe.Add(ref arrPtr, x * 16 + linearTransformationIndex);
+                ref byte dataRef = ref Unsafe.As<GaloisTable, byte>(ref Unsafe.AsRef(in this));
+                return Unsafe.Add(ref dataRef, x * 16 + linearTransformationIndex);
             }
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set
             {
-                ref byte arrPtr = ref Unsafe.As<GaloisTable, byte>(ref Unsafe.AsRef(in this));
-                Unsafe.Add(ref arrPtr, x * 16 + linearTransformationIndex) = value;
+                ref byte dataRef = ref Unsafe.As<GaloisTable, byte>(ref Unsafe.AsRef(in this));
+                Unsafe.Add(ref dataRef, x * 16 + linearTransformationIndex) = value;
             }
         }
     }

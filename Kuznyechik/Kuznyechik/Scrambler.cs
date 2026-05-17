@@ -53,7 +53,7 @@ namespace Kuznyechik
         /// <summary>
         /// Создание шифратора.
         /// </summary>
-        /// <param name="parameters">Параметры шифратора</param>
+        /// <param name="parameters">Параметры шифратора.</param>
         public Scrambler(CryptoParameters parameters)
         {
             this.bufferLength = UInt16.MaxValue + 1;
@@ -294,7 +294,7 @@ namespace Kuznyechik
                     readStream,
                     writeStream,
                     buffer,
-                    CryptoUtils.EncryptBlock,
+                    this.parameters.CryptoUtils.EncryptBlock,
                     progress,
                     cancellationToken);
             }
@@ -305,7 +305,7 @@ namespace Kuznyechik
                 readStream,
                 writeStream,
                 buffer,
-                CryptoUtils.EncryptBlock,
+                this.parameters.CryptoUtils.EncryptBlock,
                 progress,
                 cancellationToken);
 
@@ -315,7 +315,7 @@ namespace Kuznyechik
             buffer.Span[^1] = paddingLength;
 
             Vector128<byte> block = Vector128.Create(buffer.Span);
-            CryptoUtils.EncryptBlock(ref block, this.parameters);
+            this.parameters.CryptoUtils.EncryptBlock(ref block);
 
             await writeStream.WriteAsync(buffer, cancellationToken);
 
@@ -352,7 +352,7 @@ namespace Kuznyechik
                     readStream,
                     writeStream,
                     buffer,
-                    CryptoUtils.DecryptBlock,
+                    this.parameters.CryptoUtils.DecryptBlock,
                     progress,
                     cancellationToken);
             }
@@ -363,7 +363,7 @@ namespace Kuznyechik
                 readStream,
                 writeStream,
                 buffer,
-                CryptoUtils.DecryptBlock,
+                this.parameters.CryptoUtils.DecryptBlock,
                 progress,
                 cancellationToken);
 
@@ -371,7 +371,7 @@ namespace Kuznyechik
             _ = await readStream.ReadAsync(buffer, cancellationToken);
 
             Vector128<byte> block = Vector128.Create(buffer.Span);
-            CryptoUtils.DecryptBlock(ref block, this.parameters);
+            this.parameters.CryptoUtils.DecryptBlock(ref block);
 
             byte paddingLength = buffer.Span[^1];
 
@@ -382,7 +382,7 @@ namespace Kuznyechik
         }
 
         /// <summary>
-        /// Обработать часть блоков буфера.
+        /// Обработка части буфера с блоками.
         /// </summary>
         /// <param name="readStream">Поток данных.</param>
         /// <param name="writeStream">Поток преобразованных данных.</param>
@@ -406,7 +406,7 @@ namespace Kuznyechik
 
             for (int i = 0; i < blocks.Length; i++)
             {
-                action.Invoke(ref blocks[i], this.parameters);
+                action.Invoke(ref blocks[i]);
             }
 
             await writeStream.WriteAsync(buffer, cancellationToken);

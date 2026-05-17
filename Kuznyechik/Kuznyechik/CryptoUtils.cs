@@ -8,7 +8,7 @@ namespace Kuznyechik
     /// <summary>
     /// Методы преобразования данных при шифровании.
     /// </summary>
-    internal static class CryptoUtils
+    internal class CryptoUtils
     {
         /// <summary>
         /// Размер блока.
@@ -29,8 +29,135 @@ namespace Kuznyechik
         /// Делегат для вызова методов зашифровывания и расшифровывания.
         /// </summary>
         /// <param name="block">Блок.</param>
-        /// <param name="parameters">Параметры.</param>
-        internal delegate void CryptBlockDelegate(ref Vector128<byte> block, in CryptoParameters parameters);
+        internal delegate void CryptBlockDelegate(ref Vector128<byte> block);
+
+        /// <summary>
+        /// Параметры.
+        /// </summary>
+        private readonly CryptoParameters parameters;
+
+        /// <summary>
+        /// Таблица для быстрого шифрования.
+        /// </summary>
+        private readonly Vector128<byte>[,] encryptTable;
+
+        /// <summary>
+        /// Таблица для быстрого дешифрования.
+        /// </summary>
+        private readonly Vector128<byte>[,] decryptTable;
+
+        /// <summary>
+        /// Предобработанные раундовые ключи для расшифровывания.
+        /// </summary>
+        private readonly Vector128<byte>[] decryptedKeys;
+
+        /// <summary>
+        /// Создание объекта для шифрования по заданным параметрам.
+        /// </summary>
+        internal CryptoUtils(in CryptoParameters parameters)
+        {
+            this.parameters = parameters;
+
+            int maxByteValue = Byte.MaxValue + 1;
+
+            this.encryptTable = new Vector128<byte>[BlockSize, maxByteValue];
+            this.decryptTable = new Vector128<byte>[BlockSize, maxByteValue];
+            this.decryptedKeys = new Vector128<byte>[RoundKeysLength];
+
+            Vector128<byte>[,] decryptKeyTable = new Vector128<byte>[BlockSize, maxByteValue];
+
+            scoped ReadOnlySpan<byte> replaceBytes = parameters.ReplaceBytes;
+            scoped ReadOnlySpan<byte> reverseReplaceBytes = parameters.ReverseReplaceBytes;
+            Vector128<byte>[] keys = parameters.Keys;
+
+            for (int position = 0; position < BlockSize; position++)
+            {
+                for (int value = 0; value < maxByteValue; value++)
+                {
+                    Vector128<byte> block = Vector128<byte>.Zero.WithElement(position, replaceBytes[value]);
+                    LinearTransformEncrypt(ref block, parameters);
+                    this.encryptTable[position, value] = block;
+
+                    block = Vector128<byte>.Zero.WithElement(position, reverseReplaceBytes[value]);
+                    LinearTransformDecrypt(ref block, parameters);
+                    this.decryptTable[position, value] = block;
+
+                    block = Vector128<byte>.Zero.WithElement(position, (byte)value);
+                    LinearTransformDecrypt(ref block, parameters);
+                    decryptKeyTable[position, value] = block;
+                }
+            }
+
+            Span<byte> keyBytes = stackalloc byte[BlockSize];
+
+            for (int i = 0; i < RoundKeysLength; i++)
+            {
+                MemoryMarshal.Write(keyBytes, in keys[i]);
+
+                Vector128<byte> processed = Vector128<byte>.Zero;
+
+                for (int position = 0; position < BlockSize; position++)
+                {
+                    processed ^= decryptKeyTable[position, keyBytes[position]];
+                }
+
+                this.decryptedKeys[i] = processed;
+            }
+        }
+
+        /// <summary>
+        /// Зашифровывание блока.
+        /// </summary>
+        /// <param name="block">Блок.</param>
+        internal void EncryptBlock(ref Vector128<byte> block)
+        {
+            Vector128<byte>[] keys = this.parameters.Keys;
+            Span<byte> blockBytes = stackalloc byte[BlockSize];
+
+            for (int i = 0; i <= 8; i++)
+            {
+                scoped ref Vector128<byte> key = ref keys[i];
+                block ^= key;
+
+                MemoryMarshal.Write(blockBytes, in block);
+                Vector128<byte> combined = Vector128<byte>.Zero;
+
+                for (int position = 0; position < BlockSize; position++)
+                {
+                    combined ^= this.encryptTable[position, blockBytes[position]];
+                }
+
+                block = combined;
+            }
+
+            block ^= keys[9];
+        }
+
+        /// <summary>
+        /// Расшифрование блока.
+        /// </summary>
+        /// <param name="block">Блок.</param>
+        internal void DecryptBlock(ref Vector128<byte> block)
+        {
+            Span<byte> blockBytes = stackalloc byte[BlockSize];
+            ReplaceBytes(ref block, this.parameters.ReplaceBytes);
+
+            for (int i = 9; i > 0; i--)
+            {
+                Vector128<byte> combined = Vector128<byte>.Zero;
+                MemoryMarshal.Write(blockBytes, in block);
+
+                for (int position = 0; position < BlockSize; position++)
+                {
+                    combined ^= this.decryptTable[position, blockBytes[position]];
+                }
+
+                block = combined ^ this.decryptedKeys[i];
+            }
+
+            ReplaceBytes(ref block, this.parameters.ReverseReplaceBytes);
+            block ^= this.parameters.Keys[0];
+        }
 
         /// <summary>
         /// Зашифровывание блока.
@@ -77,7 +204,7 @@ namespace Kuznyechik
         /// Замена байт блока на байты из указанной таблицы.
         /// </summary>
         /// <param name="block">Блок данных.</param>
-        /// <param name="replaceBytes">таблица для нелинейного преобразования.</param>
+        /// <param name="replaceBytes">Таблица для нелинейного преобразования.</param>
         internal static void ReplaceBytes(ref Vector128<byte> block, in ReadOnlySpan<byte> replaceBytes)
         {
             scoped ref byte blockPtr = ref Unsafe.As<Vector128<byte>, byte>(ref block);

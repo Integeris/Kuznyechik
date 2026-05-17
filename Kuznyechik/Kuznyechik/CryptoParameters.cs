@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Immutable;
-using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
@@ -16,6 +15,11 @@ namespace Kuznyechik
         /// Таблица предвычисленных значений поля Галуа.
         /// </summary>
         private readonly GaloisTable galoisTable;
+
+        /// <summary>
+        /// Быстрые табличные операции.
+        /// </summary>
+        private readonly CryptoUtils cryptoUtils;
 
         /// <summary>
         /// Таблица для нелинейного преобразования.
@@ -96,7 +100,7 @@ namespace Kuznyechik
         /// <summary>
         /// Раундовые ключи.
         /// </summary>
-        public ReadOnlySpan<byte> KeysByte
+        public ReadOnlySpan<byte> KeysBytes
         {
             get => MemoryMarshal.AsBytes(this.keys.AsSpan());
         }
@@ -115,6 +119,14 @@ namespace Kuznyechik
         internal ref readonly GaloisTable GaloisTable
         {
             get => ref this.galoisTable;
+        }
+
+        /// <summary>
+        /// Быстрые табличные операции.
+        /// </summary>
+        internal ref readonly CryptoUtils CryptoUtils
+        {
+            get => ref this.cryptoUtils;
         }
 
         /// <summary>
@@ -252,6 +264,7 @@ namespace Kuznyechik
             }
 
             this.SetNewKey(key);
+            this.cryptoUtils = new CryptoUtils(this);
         }
 
         /// <summary>
@@ -311,10 +324,11 @@ namespace Kuznyechik
             this.constants = MemoryMarshal.Cast<byte, Vector128<byte>>(constants).ToArray();
 
             this.GenerationRoundKeys();
+            this.cryptoUtils = new CryptoUtils(this);
         }
 
         /// <summary>
-        /// Выставить новый ключ.
+        /// Установить новый ключ.
         /// </summary>
         /// <param name="newKey">Новый ключ.</param>
         /// <exception cref="ArgumentException"></exception>
