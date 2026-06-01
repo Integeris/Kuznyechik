@@ -51,6 +51,16 @@ namespace Kuznyechik
         }
 
         /// <summary>
+        /// Делегат шифрования.
+        /// </summary>
+        private readonly CryptBlockDelegate encryptDelegate;
+
+        /// <summary>
+        /// Делегат расшифровывания.
+        /// </summary>
+        private readonly CryptBlockDelegate decryptDelegate;
+
+        /// <summary>
         /// Создание шифратора.
         /// </summary>
         /// <param name="parameters">Параметры шифратора.</param>
@@ -58,6 +68,9 @@ namespace Kuznyechik
         {
             this.bufferLength = UInt16.MaxValue + 1;
             this.parameters = parameters ?? throw new ArgumentNullException(nameof(parameters));
+
+            this.encryptDelegate = parameters.CryptoUtils.EncryptBlock;
+            this.decryptDelegate = parameters.CryptoUtils.DecryptBlock;
         }
 
         /// <summary>
@@ -77,7 +90,10 @@ namespace Kuznyechik
             using (MemoryStream writeStream = new MemoryStream())
             {
                 this.Encrypt(readStream, writeStream);
-                arr = writeStream.ToArray();
+
+                byte[] buffer = writeStream.GetBuffer();
+                Array.Resize(ref buffer, (int)writeStream.Length);
+                arr = buffer;
             }
         }
 
@@ -113,7 +129,10 @@ namespace Kuznyechik
             {
                 await this.EncryptAsync(readStream, writeStream, progress, cancellationToken)
                     .ConfigureAwait(false);
-                return writeStream.ToArray();
+
+                byte[] buffer = writeStream.GetBuffer();
+                Array.Resize(ref buffer, (int)writeStream.Length);
+                return buffer;
             }
         }
 
@@ -152,7 +171,10 @@ namespace Kuznyechik
             using (MemoryStream writeStream = new MemoryStream())
             {
                 this.Decrypt(readStream, writeStream);
-                arr = writeStream.ToArray();
+
+                byte[] buffer = writeStream.GetBuffer();
+                Array.Resize(ref buffer, (int)writeStream.Length);
+                arr = buffer;
             }
         }
 
@@ -188,7 +210,10 @@ namespace Kuznyechik
             {
                 await this.DecryptAsync(readStream, writeStream, progress, cancellationToken)
                     .ConfigureAwait(false);
-                return writeStream.ToArray();
+
+                byte[] buffer = writeStream.GetBuffer();
+                Array.Resize(ref buffer, (int)writeStream.Length);
+                return buffer;
             }
         }
 
@@ -286,38 +311,46 @@ namespace Kuznyechik
 
             byte paddingLength = (byte)(CryptoUtils.BlockSize - totalBytes % CryptoUtils.BlockSize);
 
-            Memory<byte> buffer = new byte[this.bufferLength];
+            byte[] bufferArr = ArrayPool<byte>.Shared.Rent((int)this.bufferLength);
+            Memory<byte> buffer = bufferArr;
 
-            for (; partCount > 0; partCount--)
+            try
             {
+                for (; partCount > 0; partCount--)
+                {
+                    await this.ProcessBufferAsync(
+                        readStream,
+                        writeStream,
+                        buffer,
+                        this.encryptDelegate,
+                        progress,
+                        cancellationToken);
+                }
+
+                buffer = bufferArr.AsMemory(0, leftBlockCount * CryptoUtils.BlockSize);
+
                 await this.ProcessBufferAsync(
                     readStream,
                     writeStream,
                     buffer,
-                    this.parameters.CryptoUtils.EncryptBlock,
+                    this.encryptDelegate,
                     progress,
                     cancellationToken);
+
+                buffer = bufferArr.AsMemory(0, CryptoUtils.BlockSize);
+                _ = await readStream.ReadAsync(buffer, cancellationToken);
+
+                buffer.Span[^1] = paddingLength;
+
+                Vector128<byte> block = Vector128.Create(buffer.Span);
+                this.encryptDelegate(ref block);
+
+                await writeStream.WriteAsync(buffer, cancellationToken);
             }
-
-            buffer = new byte[leftBlockCount * CryptoUtils.BlockSize];
-
-            await this.ProcessBufferAsync(
-                readStream,
-                writeStream,
-                buffer,
-                this.parameters.CryptoUtils.EncryptBlock,
-                progress,
-                cancellationToken);
-
-            buffer = new byte[CryptoUtils.BlockSize];
-            _ = await readStream.ReadAsync(buffer, cancellationToken);
-
-            buffer.Span[^1] = paddingLength;
-
-            Vector128<byte> block = Vector128.Create(buffer.Span);
-            this.parameters.CryptoUtils.EncryptBlock(ref block);
-
-            await writeStream.WriteAsync(buffer, cancellationToken);
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(bufferArr);
+            }
 
             CryptoStatus status = new CryptoStatus(readStream.Position, readStream.Length, CryptoUtils.BlockSize);
             progress.Report(status);
@@ -344,38 +377,46 @@ namespace Kuznyechik
             long partCount = blockCount / bufferBlockSize;
             int leftBlockCount = (int)(blockCount - partCount * bufferBlockSize);
 
-            Memory<byte> buffer = new byte[this.bufferLength];
+            byte[] bufferArr = ArrayPool<byte>.Shared.Rent((int)this.bufferLength);
+            Memory<byte> buffer = bufferArr;
 
-            for (; partCount > 0; partCount--)
+            try
             {
+                for (; partCount > 0; partCount--)
+                {
+                    await this.ProcessBufferAsync(
+                        readStream,
+                        writeStream,
+                        buffer,
+                        this.decryptDelegate,
+                        progress,
+                        cancellationToken);
+                }
+
+                buffer = bufferArr.AsMemory(0, leftBlockCount * CryptoUtils.BlockSize);
+
                 await this.ProcessBufferAsync(
                     readStream,
                     writeStream,
                     buffer,
-                    this.parameters.CryptoUtils.DecryptBlock,
+                    this.decryptDelegate,
                     progress,
                     cancellationToken);
+
+                buffer = bufferArr.AsMemory(0, CryptoUtils.BlockSize);
+                _ = await readStream.ReadAsync(buffer, cancellationToken);
+
+                Vector128<byte> block = Vector128.Create(buffer.Span);
+                this.decryptDelegate(ref block);
+
+                byte paddingLength = buffer.Span[^1];
+
+                await writeStream.WriteAsync(buffer[..(CryptoUtils.BlockSize - paddingLength)], cancellationToken);
             }
-
-            buffer = new byte[leftBlockCount * CryptoUtils.BlockSize];
-
-            await this.ProcessBufferAsync(
-                readStream,
-                writeStream,
-                buffer,
-                this.parameters.CryptoUtils.DecryptBlock,
-                progress,
-                cancellationToken);
-
-            buffer = new byte[CryptoUtils.BlockSize];
-            _ = await readStream.ReadAsync(buffer, cancellationToken);
-
-            Vector128<byte> block = Vector128.Create(buffer.Span);
-            this.parameters.CryptoUtils.DecryptBlock(ref block);
-
-            byte paddingLength = buffer.Span[^1];
-
-            await writeStream.WriteAsync(buffer[..(CryptoUtils.BlockSize - paddingLength)], cancellationToken);
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(bufferArr);
+            }
 
             CryptoStatus status = new CryptoStatus(readStream.Position, readStream.Length, CryptoUtils.BlockSize);
             progress.Report(status);
@@ -398,9 +439,7 @@ namespace Kuznyechik
             IProgress<CryptoStatus> progress,
             CancellationToken cancellationToken)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            _ = await readStream.ReadAsync(buffer, cancellationToken);
+            await readStream.ReadExactlyAsync(buffer, cancellationToken);
 
             Span<Vector128<byte>> blocks = MemoryMarshal.Cast<byte, Vector128<byte>>(buffer.Span);
 
