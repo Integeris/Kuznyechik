@@ -152,8 +152,8 @@ namespace Kuznyechik
         {
             CheckStreams(readStream, writeStream);
 
-            return Task.Run(async () => 
-                await this.EncryptProcessAsync(
+            return Task.Run(() => 
+                this.EncryptProcessAsync(
                     readStream,
                     writeStream,
                     progress,
@@ -235,8 +235,8 @@ namespace Kuznyechik
             CheckStreams(readStream, writeStream);
             CheckDecryptStream(readStream);
 
-            return Task.Run(async () => 
-                await this.DecryptProcessAsync(
+            return Task.Run(() => 
+                this.DecryptProcessAsync(
                     readStream,
                     writeStream,
                     progress,
