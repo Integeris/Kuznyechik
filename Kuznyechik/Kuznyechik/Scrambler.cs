@@ -1,64 +1,58 @@
 ﻿using System;
 using System.Buffers;
 using System.IO;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Threading;
 using System.Threading.Tasks;
 using static Kuznyechik.CryptoUtils;
-
 namespace Kuznyechik
 {
     /// <summary>
     /// Шифровщик (алгоритм "Кузнечик").
     /// </summary>
-    public sealed class Scrambler
+    public abstract class Scrambler<TContext> where TContext : struct
     {
         /// <summary>
-        /// Размер буфера в байтах.
+        /// Размер буфера.
         /// </summary>
-        private uint bufferLength;
+        protected int bufferLength;
 
         /// <summary>
-        /// Параметры.
+        /// Параметры шифрования.
         /// </summary>
-        private readonly CryptoParameters parameters;
+        protected readonly CryptoParameters parameters;
 
         /// <summary>
-        /// Размер буфера в байтах.
+        /// Делегат шифрования.
         /// </summary>
-        public uint BufferLength
+        internal readonly CryptBlockDelegate encryptDelegate;
+
+        /// <summary>
+        /// Делегат расшифровывания.
+        /// </summary>
+        internal readonly CryptBlockDelegate decryptDelegate;
+
+        /// <summary>
+        /// Размер буфера.
+        /// </summary>
+        public int BufferLength
         {
             get => this.bufferLength;
             set
             {
-                if (value % CryptoUtils.BlockSize != 0)
+                if (value <= 0)
                 {
-                    throw new ArgumentException("Буфер должен быть кратен размеру блока.", nameof(this.BufferLength));
+                    throw new ArgumentOutOfRangeException(nameof(this.BufferLength), "Размер буфера должен быть больше нуля.");
+                }
+                else if (value % CryptoUtils.BlockSize != 0)
+                {
+                    throw new ArgumentException("Размер буфера обязан быть кратен размеру блока (16 байт).");
                 }
 
                 this.bufferLength = value;
             }
         }
-
-        /// <summary>
-        /// Параметры.
-        /// </summary>
-        public CryptoParameters Parameters
-        {
-            get => this.parameters;
-        }
-
-        /// <summary>
-        /// Делегат шифрования.
-        /// </summary>
-        private readonly CryptBlockDelegate encryptDelegate;
-
-        /// <summary>
-        /// Делегат расшифровывания.
-        /// </summary>
-        private readonly CryptBlockDelegate decryptDelegate;
 
         /// <summary>
         /// Создание шифратора.
@@ -77,381 +71,568 @@ namespace Kuznyechik
         /// Создание шифратора.
         /// </summary>
         /// <param name="key">Ключ (32 байта).</param>
-        public Scrambler(byte[] key) : this(new CryptoParameters(key)) { }
+        public Scrambler(ReadOnlySpan<byte> key) : this(new CryptoParameters(key)) { }
 
         /// <summary>
-        /// Зашифровывание массива блоков.
+        /// Шифрование блока данных.
         /// </summary>
-        /// <param name="arr">Массив.</param>
-        /// <exception cref="ArgumentException"></exception>
-        public void Encrypt(ref byte[] arr)
+        /// <param name="source">Источник данных.</param>
+        /// <returns>Зашифрованные данные.</returns>
+        public virtual Span<byte> Encrypt(ReadOnlySpan<byte> source)
         {
-            using (MemoryStream readStream = new MemoryStream(arr, 0, arr.Length))
-            using (MemoryStream writeStream = new MemoryStream())
+            long destinationLength = this.GetEncryptLength(source.Length);
+            Span<byte> destination = new byte[destinationLength];
+
+            TContext context = this.Initialize(source, destination);
+
+            ref byte sourceRef = ref MemoryMarshal.GetReference(source);
+            ref byte destinationRef = ref MemoryMarshal.GetReference(destination);
+
+            int fullBlocksLength = source.Length - source.Length % CryptoUtils.BlockSize;
+            int dataPosition = 0;
+
+            for (; dataPosition < fullBlocksLength; dataPosition += CryptoUtils.BlockSize)
             {
-                this.Encrypt(readStream, writeStream);
+                nuint offset = (nuint)dataPosition;
 
-                byte[] buffer = writeStream.GetBuffer();
-                Array.Resize(ref buffer, (int)writeStream.Length);
-                arr = buffer;
-            }
-        }
+                Vector128<byte> block = Vector128.LoadUnsafe(ref sourceRef, offset);
+                block = this.PreprocessEncrypt(block, ref context);
 
-        /// <summary>
-        /// Зашифровывание данных из потока в поток.
-        /// </summary>
-        /// <param name="readStream">Поток данных.</param>
-        /// <param name="writeStream">Выходной поток с зашифрованными данными.</param>
-        /// <exception cref="ArgumentException"></exception>
-        public void Encrypt(Stream readStream, Stream writeStream)
-        {
-            CheckStreams(readStream, writeStream);
-
-            TaskAwaiter awaiter = this.EncryptProcessAsync(readStream, writeStream).GetAwaiter();
-            awaiter.GetResult();
-        }
-
-        /// <summary>
-        /// Зашифровывание массива блоков.
-        /// </summary>
-        /// <param name="arr">Массив.</param>
-        /// <param name="progress">Прогресс зашифровывания.</param>
-        /// <param name="cancellationToken">Токен отмены операции.</param>
-        /// <returns>Задача зашифровывания.</returns>
-        /// <exception cref="ArgumentException"></exception>
-        public async Task<byte[]> EncryptAsync(
-            byte[] arr,
-            IProgress<CryptoStatus> progress = default,
-            CancellationToken cancellationToken = default)
-        {
-            using (MemoryStream readStream = new MemoryStream(arr, 0, arr.Length))
-            using (MemoryStream writeStream = new MemoryStream())
-            {
-                await this.EncryptAsync(readStream, writeStream, progress, cancellationToken)
-                    .ConfigureAwait(false);
-
-                byte[] buffer = writeStream.GetBuffer();
-                Array.Resize(ref buffer, (int)writeStream.Length);
-                return buffer;
-            }
-        }
-
-        /// <summary>
-        /// Зашифровывание данных из потока в поток.
-        /// </summary>
-        /// <param name="readStream">Поток для чтения данных.</param>
-        /// <param name="writeStream">Выходной поток с зашифрованными данными.</param>
-        /// <param name="progress">Прогресс зашифровывания.</param>
-        /// <param name="cancellationToken">Токен отмены операции.</param>
-        /// <returns>Задача зашифровывания.</returns>
-        public Task EncryptAsync(
-            Stream readStream,
-            Stream writeStream,
-            IProgress<CryptoStatus> progress = default,
-            CancellationToken cancellationToken = default)
-        {
-            CheckStreams(readStream, writeStream);
-
-            return Task.Run(() => 
-                this.EncryptProcessAsync(
-                    readStream,
-                    writeStream,
-                    progress,
-                    cancellationToken), cancellationToken);
-        }
-
-        /// <summary>
-        /// Расшифрование массива.
-        /// </summary>
-        /// <param name="arr">Массив.</param>
-        /// <exception cref="ArgumentException"></exception>
-        public void Decrypt(ref byte[] arr)
-        {
-            using (MemoryStream readStream = new MemoryStream(arr, 0, arr.Length))
-            using (MemoryStream writeStream = new MemoryStream())
-            {
-                this.Decrypt(readStream, writeStream);
-
-                byte[] buffer = writeStream.GetBuffer();
-                Array.Resize(ref buffer, (int)writeStream.Length);
-                arr = buffer;
-            }
-        }
-
-        /// <summary>
-        /// Расшифрование данных из потока в поток.
-        /// </summary>
-        /// <param name="readStream">Поток для чтения данных.</param>
-        /// <param name="writeStream">Выходной поток с расшифрованными данными.</param>
-        /// <exception cref="ArgumentException"></exception>
-        public void Decrypt(Stream readStream, Stream writeStream)
-        {
-            CheckStreams(readStream, writeStream);
-            CheckDecryptStream(readStream);
-
-            TaskAwaiter awaiter = this.DecryptProcessAsync(readStream, writeStream).GetAwaiter();
-            awaiter.GetResult();
-        }
-
-        /// <summary>
-        /// Расшифрование массива.
-        /// </summary>
-        /// <param name="arr">Массив.</param>
-        /// <param name="progress">Прогресс расшифровки.</param>
-        /// <param name="cancellationToken">Токен отмены операции.</param>
-        /// <returns>Задача расшифровки.</returns>
-        public async Task<byte[]> DecryptAsync(
-            byte[] arr,
-            IProgress<CryptoStatus> progress = default,
-            CancellationToken cancellationToken = default)
-        {
-            using (MemoryStream readStream = new MemoryStream(arr, 0, arr.Length))
-            using (MemoryStream writeStream = new MemoryStream())
-            {
-                await this.DecryptAsync(readStream, writeStream, progress, cancellationToken)
-                    .ConfigureAwait(false);
-
-                byte[] buffer = writeStream.GetBuffer();
-                Array.Resize(ref buffer, (int)writeStream.Length);
-                return buffer;
-            }
-        }
-
-        /// <summary>
-        /// Расшифрование данных из потока в поток.
-        /// </summary>
-        /// <param name="readStream">Поток для чтения данных.</param>
-        /// <param name="writeStream">Выходной поток с расшифрованными данными.</param>
-        /// <param name="progress">Прогресс расшифровки.</param>
-        /// <param name="cancellationToken">Токен отмены операции.</param>
-        /// <returns>Задача расшифровки.</returns>
-        /// <exception cref="ArgumentException"></exception>
-        public Task DecryptAsync(
-            Stream readStream,
-            Stream writeStream,
-            IProgress<CryptoStatus> progress = default,
-            CancellationToken cancellationToken = default)
-        {
-            CheckStreams(readStream, writeStream);
-            CheckDecryptStream(readStream);
-
-            return Task.Run(() => 
-                this.DecryptProcessAsync(
-                    readStream,
-                    writeStream,
-                    progress,
-                    cancellationToken), cancellationToken);
-        }
-
-        /// <summary>
-        /// Проверка потоков.
-        /// </summary>
-        /// <param name="readStream">Поток для чтения данных.</param>
-        /// <param name="writeStream">Поток для записи.</param>
-        /// <exception cref="ArgumentException"></exception>
-        private static void CheckStreams(Stream readStream, Stream writeStream)
-        {
-            if (readStream == null)
-            {
-                throw new ArgumentException("Поток для чтения данных не может быть null.", nameof(readStream));
-            }
-            else if (writeStream == null)
-            {
-                throw new ArgumentException("Поток для записи данных не может быть null.", nameof(writeStream));
-            }
-            else if (!writeStream.CanWrite)
-            {
-                throw new ArgumentException("Поток для записи должен быть доступен для записи.", nameof(writeStream));
-            }
-            else if (readStream == writeStream)
-            {
-                throw new ArgumentException("Нельзя выполнить чтение и запись в один и тот же поток.", nameof(writeStream));
-            }
-        }
-
-        /// <summary>
-        /// Проверка потоков.
-        /// </summary>
-        /// <param name="readStream">Поток для чтения данных.</param>
-        /// <exception cref="ArgumentException"></exception>
-        private static void CheckDecryptStream(Stream readStream)
-        {
-            if (readStream.Length == 0)
-            {
-                throw new ArgumentException("Некорректный размер потока для чтения данных: размер не может быть равен нулю.",
-                    nameof(readStream));
-            }
-            else if (readStream.Length % CryptoUtils.BlockSize != 0)
-            {
-                throw new ArgumentException("Некорректный размер потока для чтения данных: размер должен быть кратен размеру блока.",
-                    nameof(readStream));
-            }
-        }
-
-        /// <summary>
-        /// Выполнение зашифровывания.
-        /// </summary>
-        /// <param name="readStream">Поток данных.</param>
-        /// <param name="writeStream">Поток преобразованных данных.</param>
-        /// <param name="progress">Прогресс операции.</param>
-        /// <param name="cancellationToken">Токен отмены операции.</param>
-        private async Task EncryptProcessAsync(
-            Stream readStream,
-            Stream writeStream,
-            IProgress<CryptoStatus> progress = default,
-            CancellationToken cancellationToken = default)
-        {
-            progress ??= new Progress<CryptoStatus>();
-
-            uint bufferBlockSize = this.bufferLength / CryptoUtils.BlockSize;
-            long totalBytes = readStream.Length - readStream.Position;
-            long blockCount = totalBytes / CryptoUtils.BlockSize;
-            long partCount = blockCount / bufferBlockSize;
-            int leftBlockCount = (int)(blockCount - partCount * bufferBlockSize);
-
-            byte paddingLength = (byte)(CryptoUtils.BlockSize - totalBytes % CryptoUtils.BlockSize);
-
-            byte[] bufferArr = ArrayPool<byte>.Shared.Rent((int)this.bufferLength);
-            Memory<byte> buffer = bufferArr;
-
-            try
-            {
-                for (; partCount > 0; partCount--)
-                {
-                    await this.ProcessBufferAsync(
-                        readStream,
-                        writeStream,
-                        buffer,
-                        this.encryptDelegate,
-                        progress,
-                        cancellationToken);
-                }
-
-                buffer = bufferArr.AsMemory(0, leftBlockCount * CryptoUtils.BlockSize);
-
-                await this.ProcessBufferAsync(
-                    readStream,
-                    writeStream,
-                    buffer,
-                    this.encryptDelegate,
-                    progress,
-                    cancellationToken);
-
-                buffer = bufferArr.AsMemory(0, CryptoUtils.BlockSize);
-                _ = await readStream.ReadAsync(buffer, cancellationToken);
-
-                buffer.Span[^1] = paddingLength;
-
-                Vector128<byte> block = Vector128.Create(buffer.Span);
                 this.encryptDelegate(ref block);
 
-                await writeStream.WriteAsync(buffer, cancellationToken);
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(bufferArr);
+                Vector128.StoreUnsafe(block, ref destinationRef, offset);
             }
 
-            CryptoStatus status = new CryptoStatus(readStream.Position, readStream.Length, CryptoUtils.BlockSize);
-            progress.Report(status);
+            ReadOnlySpan<byte> lastBytes = source[dataPosition..];
+            Vector128<byte> lastBlock = this.ProcessLastBlock(lastBytes, ref context);
+
+            this.encryptDelegate(ref lastBlock);
+
+            Vector128.StoreUnsafe(lastBlock, ref destinationRef, (nuint)dataPosition);
+
+            return destination;
         }
 
         /// <summary>
-        /// Выполнение расшифровывания.
+        /// Шифрование потока данных.
         /// </summary>
-        /// <param name="readStream">Поток данных.</param>
-        /// <param name="writeStream">Поток преобразованных данных.</param>
-        /// <param name="progress">Прогресс операции.</param>
-        /// <param name="cancellationToken">Токен отмены операции.</param>
-        private async Task DecryptProcessAsync(
-            Stream readStream,
-            Stream writeStream,
-            IProgress<CryptoStatus> progress = default,
-            CancellationToken cancellationToken = default)
+        /// <param name="sourceStream">Поток данных.</param>
+        /// <param name="destinationStream">Целевой поток данных.</param>
+        public virtual void Encrypt(Stream sourceStream, Stream destinationStream)
         {
-            progress ??= new Progress<CryptoStatus>();
+            CheckStreams(sourceStream, destinationStream);
+            TContext context = this.Initialize(sourceStream, destinationStream);
 
-            uint bufferBlockSize = this.bufferLength / CryptoUtils.BlockSize;
-            long totalBytes = readStream.Length - readStream.Position;
-            long blockCount = totalBytes / CryptoUtils.BlockSize - 1;
-            long partCount = blockCount / bufferBlockSize;
-            int leftBlockCount = (int)(blockCount - partCount * bufferBlockSize);
+            long sourceLength = sourceStream.Length - sourceStream.Position;
+            int blocksPerBuffer = this.bufferLength / CryptoUtils.BlockSize;
+            long fullBufferCount = sourceLength / this.bufferLength;
+            int remainingBytes = (int)(sourceLength % this.bufferLength);
 
-            byte[] bufferArr = ArrayPool<byte>.Shared.Rent((int)this.bufferLength);
-            Memory<byte> buffer = bufferArr;
+            byte[] bufferArr = ArrayPool<byte>.Shared.Rent(this.bufferLength);
+            Span<byte> buffer = bufferArr.AsSpan(0, this.bufferLength);
+            ref byte bufferRef = ref MemoryMarshal.GetReference(buffer);
+
+            nuint bufferPosition;
 
             try
             {
-                for (; partCount > 0; partCount--)
+                for (int i = 0; i < fullBufferCount; i++)
                 {
-                    await this.ProcessBufferAsync(
-                        readStream,
-                        writeStream,
-                        buffer,
-                        this.decryptDelegate,
-                        progress,
-                        cancellationToken);
+                    sourceStream.ReadExactly(buffer);
+                    bufferPosition = 0;
+
+                    for (int j = 0; j < blocksPerBuffer; j++)
+                    {
+                        Vector128<byte> block = Vector128.LoadUnsafe(in bufferRef, bufferPosition);
+
+                        block = this.PreprocessEncrypt(block, ref context);
+
+                        this.encryptDelegate(ref block);
+                        block.StoreUnsafe(ref bufferRef, bufferPosition);
+
+                        bufferPosition += CryptoUtils.BlockSize;
+                    }
+
+                    destinationStream.Write(buffer);
                 }
 
-                buffer = bufferArr.AsMemory(0, leftBlockCount * CryptoUtils.BlockSize);
+                int tailBlockLeft = remainingBytes / CryptoUtils.BlockSize;
+                int tailBlocksBytes = tailBlockLeft * CryptoUtils.BlockSize;
 
-                await this.ProcessBufferAsync(
-                    readStream,
-                    writeStream,
-                    buffer,
-                    this.decryptDelegate,
-                    progress,
-                    cancellationToken);
+                if (tailBlockLeft > 0)
+                {
+                    buffer = buffer[..tailBlocksBytes];
+                    sourceStream.ReadExactly(buffer);
 
-                buffer = bufferArr.AsMemory(0, CryptoUtils.BlockSize);
-                _ = await readStream.ReadAsync(buffer, cancellationToken);
+                    bufferPosition = 0;
 
-                Vector128<byte> block = Vector128.Create(buffer.Span);
-                this.decryptDelegate(ref block);
+                    for (int i = 0; i < tailBlockLeft; i++)
+                    {
+                        Vector128<byte> block = Vector128.LoadUnsafe(in bufferRef, bufferPosition);
 
-                byte paddingLength = buffer.Span[^1];
+                        block = this.PreprocessEncrypt(block, ref context);
 
-                await writeStream.WriteAsync(buffer[..(CryptoUtils.BlockSize - paddingLength)], cancellationToken);
+                        this.encryptDelegate(ref block);
+                        block.StoreUnsafe(ref bufferRef, bufferPosition);
+
+                        bufferPosition += CryptoUtils.BlockSize;
+                    }
+
+                    destinationStream.Write(buffer);
+                }
+
+                int lastBytes = remainingBytes - tailBlocksBytes;
+
+                Span<byte> tail = buffer[..lastBytes];
+                buffer = buffer[..CryptoUtils.BlockSize];
+
+                sourceStream.ReadExactly(tail);
+
+                Vector128<byte> lastBlock = this.ProcessLastBlock(tail, ref context);
+
+                this.encryptDelegate(ref lastBlock);
+                Vector128.StoreUnsafe(lastBlock, ref bufferRef);
+
+                destinationStream.Write(buffer);
             }
             finally
             {
                 ArrayPool<byte>.Shared.Return(bufferArr);
             }
-
-            CryptoStatus status = new CryptoStatus(readStream.Position, readStream.Length, CryptoUtils.BlockSize);
-            progress.Report(status);
         }
 
         /// <summary>
-        /// Обработка части буфера с блоками.
+        /// Расшифровывание блока данных.
         /// </summary>
-        /// <param name="readStream">Поток данных.</param>
-        /// <param name="writeStream">Поток преобразованных данных.</param>
-        /// <param name="buffer">Буфер.</param>
-        /// <param name="action">Делегат для зашифровывания или расшифрования блока.</param>
-        /// <param name="progress">Прогресс операции.</param>
-        /// <param name="cancellationToken">Токен отмены операции.</param>
-        private async Task ProcessBufferAsync(
-            Stream readStream,
-            Stream writeStream,
-            Memory<byte> buffer,
-            CryptBlockDelegate action,
-            IProgress<CryptoStatus> progress,
-            CancellationToken cancellationToken)
+        /// <param name="source">Источник данных.</param>
+        /// <returns>Расшифрованные данные.</returns>
+        public virtual Span<byte> Decrypt(ReadOnlySpan<byte> source)
         {
-            await readStream.ReadExactlyAsync(buffer, cancellationToken);
-
-            Span<Vector128<byte>> blocks = MemoryMarshal.Cast<byte, Vector128<byte>>(buffer.Span);
-
-            for (int i = 0; i < blocks.Length; i++)
+            if (source.Length % CryptoUtils.BlockSize != 0)
             {
-                action.Invoke(ref blocks[i]);
+                throw new ArgumentException("Размер зашифрованных данных должен быть кратен размеру блока.", nameof(source));
             }
 
-            await writeStream.WriteAsync(buffer, cancellationToken);
+            Span<byte> destination = new byte[source.Length];
 
-            CryptoStatus status = new CryptoStatus(readStream.Position, readStream.Length, this.bufferLength);
-            progress.Report(status);
+            TContext context = this.Initialize(source, destination);
+
+            ref byte sourceRef = ref MemoryMarshal.GetReference(source);
+            ref byte destinationRef = ref MemoryMarshal.GetReference(destination);
+
+            int fullBlocksLength = source.Length - source.Length % CryptoUtils.BlockSize;
+            int dataPosition = 0;
+
+            for (; dataPosition < fullBlocksLength; dataPosition += CryptoUtils.BlockSize)
+            {
+                nuint offset = (nuint)dataPosition;
+
+                Vector128<byte> block = Vector128.LoadUnsafe(ref sourceRef, offset);
+                this.decryptDelegate(ref block);
+
+                block = this.PostprocessDecrypt(block, ref context);
+                Vector128.StoreUnsafe(block, ref destinationRef, offset);
+            }
+
+            this.RemovePadding(ref destination, ref context);
+
+            return destination;
         }
+
+        /// <summary>
+        /// Расшифровывание потока данных.
+        /// </summary>
+        /// <param name="sourceStream">Поток данных.</param>
+        /// <param name="destinationStream">Целевой поток данных.</param>
+        public virtual void Decrypt(Stream sourceStream, Stream destinationStream)
+        {
+            CheckStreams(sourceStream, destinationStream);
+            TContext context = this.Initialize(sourceStream, destinationStream);
+
+            long sourceLength = sourceStream.Length - sourceStream.Position;
+            int blocksPerBuffer = this.bufferLength / CryptoUtils.BlockSize;
+            long fullBufferCount = sourceLength / this.bufferLength;
+
+            if (sourceLength % CryptoUtils.BlockSize != 0)
+            {
+                throw new ArgumentException("Размер зашифрованного потока должен быть кратен размеру блока.", nameof(sourceStream));
+            }
+
+            byte[] bufferArr = ArrayPool<byte>.Shared.Rent(this.bufferLength);
+            Span<byte> buffer = bufferArr.AsSpan(0, this.bufferLength);
+            ref byte bufferRef = ref MemoryMarshal.GetReference(buffer);
+
+            nuint bufferPosition;
+
+            try
+            {
+                for (int i = 0; i < fullBufferCount; i++)
+                {
+                    sourceStream.ReadExactly(buffer);
+                    bufferPosition = 0;
+
+                    for (int j = 0; j < blocksPerBuffer; j++)
+                    {
+                        Vector128<byte> block = Vector128.LoadUnsafe(in bufferRef, bufferPosition);
+
+                        this.decryptDelegate(ref block);
+                        block = this.PostprocessDecrypt(block, ref context);
+
+                        Vector128.StoreUnsafe(block, ref bufferRef, bufferPosition);
+
+                        bufferPosition += CryptoUtils.BlockSize;
+                    }
+
+                    destinationStream.Write(buffer);
+                }
+
+                int tailSize = (int)(sourceLength - fullBufferCount * this.bufferLength);
+                int blockLeft = tailSize / CryptoUtils.BlockSize;
+
+                buffer = buffer[..tailSize];
+                sourceStream.ReadExactly(buffer);
+
+                bufferPosition = 0;
+
+                for (int i = 0; i < blockLeft; i++)
+                {
+                    Vector128<byte> block = Vector128.LoadUnsafe(in bufferRef, bufferPosition);
+
+                    this.decryptDelegate(ref block);
+                    block = this.PostprocessDecrypt(block, ref context);
+
+                    Vector128.StoreUnsafe(block, ref bufferRef, bufferPosition);
+
+                    bufferPosition += CryptoUtils.BlockSize;
+                }
+
+                this.RemovePadding(ref buffer, ref context);
+
+                destinationStream.Write(buffer);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(bufferArr);
+            }
+        }
+
+        /// <summary>
+        /// Шифрование потока данных.
+        /// </summary>
+        /// <param name="sourceStream">Поток данных.</param>
+        /// <param name="destinationStream">Целевой поток данных.</param>
+        /// <param name="progress">Прогресс.</param>
+        /// <param name="cancellationToken">Токен отмены операции.</param>
+        /// <returns>Задача шифрования.</returns>
+        public virtual async Task EncryptAsync(Stream sourceStream,
+            Stream destinationStream, 
+            IProgress<CryptoStatus> progress = default,
+            CancellationToken cancellationToken = default)
+        {
+            CheckStreams(sourceStream, destinationStream);
+            TContext context = this.Initialize(sourceStream, destinationStream);
+
+            long sourceLength = sourceStream.Length - sourceStream.Position;
+            int blocksPerBuffer = this.bufferLength / CryptoUtils.BlockSize;
+            long fullBufferCount = sourceLength / this.bufferLength;
+            int remainingBytes = (int)(sourceLength % this.bufferLength);
+
+            byte[] bufferArr = ArrayPool<byte>.Shared.Rent(this.bufferLength);
+            Memory<byte> buffer = bufferArr.AsMemory(0, this.bufferLength);
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            nuint bufferPosition;
+            long currentDataPosition = 0;
+
+            try
+            {
+                for (int i = 0; i < fullBufferCount; i++)
+                {
+                    await sourceStream.ReadExactlyAsync(buffer, cancellationToken).ConfigureAwait(false);
+
+                    ref byte bufferRef = ref MemoryMarshal.GetReference(buffer.Span);
+                    bufferPosition = 0;
+
+                    for (int j = 0; j < blocksPerBuffer; j++)
+                    {
+                        Vector128<byte> block = Vector128.LoadUnsafe(in bufferRef, bufferPosition);
+
+                        block = this.PreprocessEncrypt(block, ref context);
+
+                        this.encryptDelegate(ref block);
+                        block.StoreUnsafe(ref bufferRef, bufferPosition);
+
+                        bufferPosition += CryptoUtils.BlockSize;
+                    }
+
+                    await destinationStream.WriteAsync(buffer, cancellationToken).ConfigureAwait(false);
+
+                    if (progress != null)
+                    {
+                        currentDataPosition += this.bufferLength;
+
+                        CryptoStatus status = new CryptoStatus(currentDataPosition, sourceLength, this.bufferLength);
+                        progress.Report(status);
+                    }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
+                int tailBlockLeft = remainingBytes / CryptoUtils.BlockSize;
+                int tailBlocksBytes = tailBlockLeft * CryptoUtils.BlockSize;
+
+                if (tailBlockLeft > 0)
+                {
+                    buffer = buffer[..tailBlocksBytes];
+                    await sourceStream.ReadExactlyAsync(buffer, cancellationToken).ConfigureAwait(false);
+
+                    ref byte tailBufferRef = ref MemoryMarshal.GetReference(buffer.Span);
+                    bufferPosition = 0;
+
+                    for (int i = 0; i < tailBlockLeft; i++)
+                    {
+                        Vector128<byte> block = Vector128.LoadUnsafe(in tailBufferRef, bufferPosition);
+
+                        block = this.PreprocessEncrypt(block, ref context);
+
+                        this.encryptDelegate(ref block);
+                        block.StoreUnsafe(ref tailBufferRef, bufferPosition);
+
+                        bufferPosition += CryptoUtils.BlockSize;
+                    }
+
+                    await destinationStream.WriteAsync(buffer, cancellationToken).ConfigureAwait(false);
+
+                    if (progress != null)
+                    {
+                        currentDataPosition += tailBlocksBytes;
+
+                        CryptoStatus status = new CryptoStatus(currentDataPosition, sourceLength, this.bufferLength);
+                        progress.Report(status);
+                    }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
+                int lastBytes = remainingBytes - tailBlocksBytes;
+
+                Memory<byte> tail = buffer[..lastBytes];
+                buffer = buffer[..CryptoUtils.BlockSize];
+
+                await sourceStream.ReadExactlyAsync(tail, cancellationToken).ConfigureAwait(false);
+
+                ref byte lastBufferRef = ref MemoryMarshal.GetReference(buffer.Span);
+
+                Vector128<byte> lastBlock = this.ProcessLastBlock(tail.Span, ref context);
+
+                this.encryptDelegate(ref lastBlock);
+                Vector128.StoreUnsafe(lastBlock, ref lastBufferRef);
+
+                await destinationStream.WriteAsync(buffer, cancellationToken).ConfigureAwait(false);
+
+                if (progress != null)
+                {
+                    CryptoStatus status = new CryptoStatus(sourceLength, sourceLength, this.bufferLength);
+                    progress.Report(status);
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(bufferArr);
+            }
+        }
+
+        /// <summary>
+        /// Расшифровывание потока данных.
+        /// </summary>
+        /// <param name="sourceStream">Поток данных.</param>
+        /// <param name="destinationStream">Целевой поток данных.</param>
+        /// <param name="progress">Прогресс.</param>
+        /// <param name="cancellationToken">Токен отмены операции.</param>
+        public virtual async Task DecryptAsync(Stream sourceStream,
+            Stream destinationStream,
+            IProgress<CryptoStatus> progress = default,
+            CancellationToken cancellationToken = default)
+        {
+            CheckStreams(sourceStream, destinationStream);
+            TContext context = this.Initialize(sourceStream, destinationStream);
+
+            long sourceLength = sourceStream.Length - sourceStream.Position;
+            int blocksPerBuffer = this.bufferLength / CryptoUtils.BlockSize;
+            long fullBufferCount = sourceLength / this.bufferLength;
+
+            if (sourceLength % CryptoUtils.BlockSize != 0)
+            {
+                throw new ArgumentException("Размер зашифрованного потока должен быть кратен размеру блока.", nameof(sourceStream));
+            }
+
+            byte[] bufferArr = ArrayPool<byte>.Shared.Rent(this.bufferLength);
+            Memory<byte> buffer = bufferArr.AsMemory(0, this.bufferLength);
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            nuint bufferPosition;
+            long currentDataPosition = 0;
+
+            try
+            {
+                for (int i = 0; i < fullBufferCount; i++)
+                {
+                    await sourceStream.ReadExactlyAsync(buffer, cancellationToken).ConfigureAwait(false);
+                    ref byte bufferRef = ref MemoryMarshal.GetReference(buffer.Span);
+                    bufferPosition = 0;
+
+                    for (int j = 0; j < blocksPerBuffer; j++)
+                    {
+                        Vector128<byte> block = Vector128.LoadUnsafe(in bufferRef, bufferPosition);
+
+                        this.decryptDelegate(ref block);
+                        block = this.PostprocessDecrypt(block, ref context);
+
+                        Vector128.StoreUnsafe(block, ref bufferRef, bufferPosition);
+
+                        bufferPosition += CryptoUtils.BlockSize;
+                    }
+
+                    await destinationStream.WriteAsync(buffer, cancellationToken).ConfigureAwait(false);
+
+                    if (progress != null)
+                    {
+                        currentDataPosition += this.bufferLength;
+
+                        CryptoStatus status = new CryptoStatus(currentDataPosition, sourceLength, this.bufferLength);
+                        progress.Report(status);
+                    }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
+                int tailSize = (int)(sourceLength - fullBufferCount * this.bufferLength);
+                int blockLeft = tailSize / CryptoUtils.BlockSize;
+
+                buffer = buffer[..tailSize];
+
+                await sourceStream.ReadExactlyAsync(buffer, cancellationToken).ConfigureAwait(false);
+                ref byte tailBufferRef = ref MemoryMarshal.GetReference(buffer.Span);
+                bufferPosition = 0;
+
+                for (int i = 0; i < blockLeft; i++)
+                {
+                    Vector128<byte> block = Vector128.LoadUnsafe(in tailBufferRef, bufferPosition);
+
+                    this.decryptDelegate(ref block);
+                    block = this.PostprocessDecrypt(block, ref context);
+
+                    Vector128.StoreUnsafe(block, ref tailBufferRef, bufferPosition);
+
+                    bufferPosition += CryptoUtils.BlockSize;
+                }
+
+                Span<byte> bufferSpan = buffer.Span;
+
+                this.RemovePadding(ref bufferSpan, ref context);
+                buffer = buffer[..bufferSpan.Length];
+
+                await destinationStream.WriteAsync(buffer, cancellationToken).ConfigureAwait(false);
+
+                if (progress != null)
+                {
+                    CryptoStatus status = new CryptoStatus(sourceLength, sourceLength, this.bufferLength);
+                    progress.Report(status);
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(bufferArr);
+            }
+        }
+
+        /// <summary>
+        /// Проверка потоков.
+        /// </summary>
+        /// <param name="sourceStream">Поток данных.</param>
+        /// <param name="destinationStream">Целевой поток данных.</param>
+        protected static void CheckStreams(Stream sourceStream, Stream destinationStream)
+        {
+            if (sourceStream is null)
+            {
+                throw new ArgumentNullException(nameof(sourceStream), "Поток данных не может быть null.");
+            }
+            else if (destinationStream is null)
+            {
+                throw new ArgumentNullException(nameof(destinationStream), "Целевой поток не может быть null.");
+            }
+            else if (!sourceStream.CanRead)
+            {
+                throw new ArgumentException("Поток данных должен быть доступен для чтения.", nameof(sourceStream));
+            }
+            else if (!destinationStream.CanWrite)
+            {
+                throw new ArgumentException("Целевой поток должен быть доступен для записи.", nameof(destinationStream));
+            }
+            else if (!sourceStream.CanSeek)
+            {
+                throw new ArgumentException("Поток данных не поддерживает поиск (Seek).", nameof(sourceStream));
+            }
+            else if (!destinationStream.CanSeek)
+            {
+                throw new ArgumentException("Целевой поток не поддерживает поиск (Seek).", nameof(destinationStream));
+            }
+        }
+
+        /// <summary>
+        /// Получение длины зашифрованных данных.
+        /// </summary>
+        /// <param name="dataLength">Длина данных.</param>
+        /// <returns>Длина зашифрованных данных.</returns>
+        protected abstract long GetEncryptLength(long dataLength);
+
+        /// <summary>
+        /// Инициализация шифрования.
+        /// </summary>
+        /// <param name="source">Источник данных.</param>
+        /// <param name="destination">Целевая область данных.</param>
+        /// <returns>Контекст.</returns>
+        protected abstract TContext Initialize(ReadOnlySpan<byte> source, Span<byte> destination);
+
+        /// <summary>
+        /// Инициализация шифрования.
+        /// </summary>
+        /// <param name="sourceStream">Поток источника.</param>
+        /// <param name="destinationStream">Целевой поток.</param>
+        /// <returns>Контекст.</returns>
+        protected abstract TContext Initialize(Stream sourceStream, Stream destinationStream);
+
+        /// <summary>
+        /// Предварительная обработка данных перед шифрованием.
+        /// </summary>
+        /// <param name="block">Блок данных.</param>
+        /// <param name="context">Контекст.</param>
+        /// <returns>Обработанный блок.</returns>
+        protected abstract Vector128<byte> PreprocessEncrypt(Vector128<byte> block, ref TContext context);
+
+        /// <summary>
+        /// Предварительная обработка данных после расшифровывания.
+        /// </summary>
+        /// <param name="block">Блок данных.</param>
+        /// <param name="context">Контекст.</param>
+        /// <returns>Обработанный блок.</returns>
+        protected abstract Vector128<byte> PostprocessDecrypt(Vector128<byte> block, ref TContext context);
+
+        /// <summary>
+        /// Обработка остатка данных, не вошедших в блок.
+        /// </summary>
+        /// <param name="lastBytes">Последние байты, не вошедшие в блок.</param>
+        /// <param name="context">Контекст.</param>
+        /// <returns>Последний блок.</returns>
+        protected abstract Vector128<byte> ProcessLastBlock(ReadOnlySpan<byte> lastBytes, ref TContext context);
+
+        /// <summary>
+        /// Удаление дополнения.
+        /// </summary>
+        /// <param name="data">Данные.</param>
+        /// <param name="context">Контекст.</param>
+        protected abstract void RemovePadding(scoped ref Span<byte> data, scoped ref TContext context);
     }
 }
