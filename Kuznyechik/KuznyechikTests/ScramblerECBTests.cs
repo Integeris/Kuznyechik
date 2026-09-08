@@ -18,12 +18,51 @@ namespace KuznyechikTests
         {
             Span<byte> key = stackalloc byte[32];
             byte[] data = new byte[dataLength];
+
+            {
+                Random.Shared.NextBytes(key);
+                Random.Shared.NextBytes(data);
+            }
+
             Span<byte> encryptedData;
 
             ScramblerECB scrambler = new ScramblerECB(key);
             encryptedData = scrambler.Encrypt(data);
 
             Span<byte> decryptedData = scrambler.Decrypt(encryptedData);
+            Assert.IsTrue(data.SequenceEqual(decryptedData));
+        }
+
+        [TestMethod("Зашифровка с использованием потока.")]
+        [DataRow(0, DisplayName = "Нулевой блок")]
+        [DataRow(10, DisplayName = "Неполный блок")]
+        [DataRow(16, DisplayName = "Полный блок")]
+        [DataRow(26, DisplayName = "Полный блок с остатком")]
+        [DataRow(32, DisplayName = "Данные кратные 16.")]
+        public void TestStreamEncrypt(int dataLength)
+        {
+            Span<byte> key = stackalloc byte[32];
+            byte[] data = new byte[dataLength];
+            byte[] encryptedData;
+            byte[] decryptedData;
+
+            {
+                Random.Shared.NextBytes(key);
+                Random.Shared.NextBytes(data);
+            }
+
+            ScramblerECB scrambler = new ScramblerECB(key);
+
+            using (MemoryStream inputStream = new MemoryStream(data, false))
+            using (MemoryStream encryptedStream = new MemoryStream())
+            {
+                scrambler.Encrypt(inputStream, encryptedStream);
+
+                encryptedData = encryptedStream.ToArray();
+            }
+
+            decryptedData = scrambler.Decrypt(encryptedData).ToArray();
+
             Assert.IsTrue(data.SequenceEqual(decryptedData));
         }
 
@@ -38,6 +77,11 @@ namespace KuznyechikTests
             Span<byte> key = stackalloc byte[32];
             byte[] data = new byte[dataLength];
             byte[] encryptedData;
+
+            {
+                Random.Shared.NextBytes(key);
+                Random.Shared.NextBytes(data);
+            }
 
             ScramblerECB scrambler = new ScramblerECB(key);
             encryptedData = scrambler.Encrypt(data).ToArray();
@@ -61,6 +105,11 @@ namespace KuznyechikTests
             Span<byte> key = stackalloc byte[32];
             byte[] data = new byte[dataLength];
             byte[] encryptedData = new byte[data.Length + 16 - data.Length % 16];
+
+            {
+                Random.Shared.NextBytes(key);
+                Random.Shared.NextBytes(data);
+            }
 
             ScramblerECB scrambler = new ScramblerECB(key);
 

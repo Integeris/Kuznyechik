@@ -5,24 +5,21 @@ using System.Runtime.Intrinsics;
 namespace Kuznyechik
 {
     /// <summary>
-    /// Шифровальщик в режиме ECB.
+    /// Шифровальщик в режиме CTR.
     /// </summary>
-    /// <remarks>
-    /// Режим ECB не рекомендуется для шифрования больших массивов данных из-за утечки паттернов.
-    /// </remarks>
-    public class ScramblerECB : Scrambler<byte>
+    public class ScramblerСTR : Scrambler<long>
     {
         /// <summary>
-        /// Создание шифровальщика в режиме ECB.
+        /// Создание шифровальщика в режиме CTR.
         /// </summary>
         /// <param name="key">Ключ.</param>
-        public ScramblerECB(ReadOnlySpan<byte> key) : base(key) { }
+        public ScramblerСTR(ReadOnlySpan<byte> key) : base(key) { }
 
         /// <summary>
-        /// Создание шифровальщика в режиме ECB.
+        /// Создание шифровальщика в режиме CTR.
         /// </summary>
-        /// <param name="parameters">Параметры шифрования.</param>
-        public ScramblerECB(CryptoParameters parameters) : base(parameters) { }
+        /// <param name="parameters">Параметры.</param>
+        public ScramblerСTR(CryptoParameters parameters) : base(parameters) { }
 
         /// <summary>
         /// Получение длины зашифрованных данных.
@@ -31,7 +28,7 @@ namespace Kuznyechik
         /// <returns>Длина зашифрованных данных.</returns>
         protected override long GetEncryptLength(long dataLength)
         {
-            return dataLength + CryptoUtils.BlockSize - dataLength % CryptoUtils.BlockSize;
+            return dataLength;
         }
 
         /// <summary>
@@ -40,9 +37,9 @@ namespace Kuznyechik
         /// <param name="source">Источник данных.</param>
         /// <param name="destination">Целевая область данных.</param>
         /// <returns>Контекст.</returns>
-        protected override byte Initialize(ReadOnlySpan<byte> source, Span<byte> destination)
+        protected override long Initialize(ReadOnlySpan<byte> source, Span<byte> destination)
         {
-            return 0;
+            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -51,9 +48,9 @@ namespace Kuznyechik
         /// <param name="sourceStream">Поток источника.</param>
         /// <param name="destinationStream">Целевой поток.</param>
         /// <returns>Контекст.</returns>
-        protected override byte Initialize(Stream sourceStream, Stream destinationStream)
+        protected override long Initialize(Stream sourceStream, Stream destinationStream)
         {
-            return 0;
+            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -62,9 +59,9 @@ namespace Kuznyechik
         /// <param name="block">Блок данных.</param>
         /// <param name="context">Контекст.</param>
         /// <returns>Обработанный блок.</returns>
-        protected override Vector128<byte> PreprocessEncrypt(Vector128<byte> block, ref byte context)
+        protected override Vector128<byte> PreprocessEncrypt(Vector128<byte> block, ref long context)
         {
-            return block;
+            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -73,9 +70,9 @@ namespace Kuznyechik
         /// <param name="block">Блок данных.</param>
         /// <param name="context">Контекст.</param>
         /// <returns>Обработанный блок.</returns>
-        protected override Vector128<byte> PostprocessDecrypt(Vector128<byte> block, ref byte context)
+        protected override Vector128<byte> PostprocessDecrypt(Vector128<byte> block, ref long context)
         {
-            return block;
+            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -84,16 +81,9 @@ namespace Kuznyechik
         /// <param name="lastBytes">Последние байты, не вошедшие в блок.</param>
         /// <param name="context">Контекст.</param>
         /// <returns>Последний блок.</returns>
-        protected override Vector128<byte> ProcessLastBlock(ReadOnlySpan<byte> lastBytes, ref byte context)
+        protected override Vector128<byte> ProcessLastBlock(ReadOnlySpan<byte> lastBytes, ref long context)
         {
-            byte lostByteLength = (byte)(CryptoUtils.BlockSize - lastBytes.Length);
-
-            Span<byte> blockSpan = stackalloc byte[CryptoUtils.BlockSize];
-
-            blockSpan.Fill(lostByteLength);
-            lastBytes.CopyTo(blockSpan);
-
-            return Vector128.Create(blockSpan);
+            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -101,23 +91,9 @@ namespace Kuznyechik
         /// </summary>
         /// <param name="data">Данные.</param>
         /// <param name="context">Контекст.</param>
-        protected override void RemovePadding(scoped ref Span<byte> data, scoped ref byte context)
+        protected override void RemovePadding(scoped ref Span<byte> data, scoped ref long context)
         {
-            byte paddingLength = data[^1];
-
-            if (paddingLength == 0 || paddingLength > CryptoUtils.BlockSize)
-            {
-                throw new ArgumentException("Некорректный размер дополнения. Возможно, данные повреждены.", nameof(data));
-            }
-
-            Span<byte> padding = data[^paddingLength..];
-
-            if (padding.IndexOfAnyExcept(paddingLength) != -1)
-            {
-                throw new ArgumentException("Ошибка структуры дополнения.", nameof(data));
-            }
-
-            data = data[..^paddingLength];
+            throw new NotImplementedException();
         }
     }
 }

@@ -6,6 +6,7 @@ using System.Runtime.Intrinsics;
 using System.Threading;
 using System.Threading.Tasks;
 using static Kuznyechik.CryptoUtils;
+
 namespace Kuznyechik
 {
     /// <summary>
